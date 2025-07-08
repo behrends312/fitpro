@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 
 export default function Sidebar() {
     return (
@@ -7,8 +8,8 @@ export default function Sidebar() {
                 FitPro
             </div>
             <nav className="flex-1 p-4 space-y-2">
-                <SidebarItem text="Dashboard" />
-                <SidebarItem text="Alunos" />
+                <SidebarItem text="Dashboard" to="/" />
+                <SidebarItem text="Alunos" to="/alunos" />
                 <SidebarItem text="Personais" />
                 <SidebarItem text="Exercícios" />
                 <SidebarItem text="Vídeos" />
@@ -20,7 +21,15 @@ export default function Sidebar() {
     );
 }
 
-function SidebarItem({ text }) {
+function SidebarItem({ text, to }) {
+    if (to) {
+        return (
+            <Link to={to} className="block hover:bg-gray-800 p-2 rounded">
+                {text}
+            </Link>
+        );
+    }
+
     return (
         <div className="hover:bg-gray-800 p-2 rounded cursor-pointer">
             {text}
