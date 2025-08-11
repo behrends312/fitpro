@@ -6,26 +6,27 @@ import ProgressoExercicio from "../components/ProgressoExercicio";
 
 export default function Alunos() {
     return (
-        <div className="flex-1 bg-gray-100">
-            <h1 className="text-2xl font-semibold mb-4">Visualização do Aluno (Exemplo)</h1>
+        <div className="flex-1 bg-gray-50 p-6">
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-2xl font-bold text-gray-800">Visualização do Aluno</h1>
+                <button className="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                    Ver histórico completo
+                </button>
+            </div>
 
-            {/* Informações principais */}
-            <div className="flex flex-col md:flex-row gap-6 mb-6 md:items-stretch">
-                <div className="w-full md:w-1/3">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+                <div className="lg:col-span-1 ">
                     <AlunoInfo />
                 </div>
-                <div className="flex-1 ">
+                <div className="lg:col-span-2">
                     <TreinoAtual />
                 </div>
             </div>
 
-            <ProgressoExercicio />
-
-            {/* Últimos treinos */}
-            <UltimosTreinos />
-
-            {/* Exercício e progresso */}
-
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <ProgressoExercicio />
+                <UltimosTreinos />
+            </div>
         </div>
     );
 }
