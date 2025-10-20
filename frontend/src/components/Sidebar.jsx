@@ -1,9 +1,24 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate  } from "react-router-dom";
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faUsersLine, faDumbbell, faVideo, faClipboard, faChartLine } from '@fortawesome/free-solid-svg-icons';
+import api from "../services/api";
 
 export default function Sidebar() {
+
+    const navigate = useNavigate();
+
+  const handleLogout = () => {
+    // Remove o token salvo
+    localStorage.removeItem("token");
+
+    // Remove o header Authorization (opcional mas recomendado)
+    delete api.defaults.headers.common.Authorization;
+
+    // Redireciona para login
+    navigate("/login");
+  };
+
     return (
         <>
             <aside className="w-36 bg-[#0B1120] text-white flex flex-col min-h-screen pt-10 fixed overflow-y-auto ">
@@ -15,7 +30,12 @@ export default function Sidebar() {
                     <SidebarItem icon={faVideo} text="Vídeos" to="/" />
                     <div className="border-t border-gray-700 my-2" />
                     <SidebarItem text="Configurações" />
-                    <SidebarItem text="Sair" />
+                    <div
+                        onClick={handleLogout}
+                        className="hover:bg-gray-800 p-2 rounded cursor-pointer text-red-400 font-semibold"
+                        >
+                        Sair
+                    </div>
                 </nav>
             </aside>
 
