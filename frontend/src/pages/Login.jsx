@@ -17,6 +17,7 @@ export default function Login() {
 
       // guarda o token e configura o header global
       localStorage.setItem("token", token);
+      localStorage.setItem("role", user.role);
       api.defaults.headers.common.Authorization = `Bearer ${token}`;
 
       alert(`Bem-vindo, ${user.email}!`);

@@ -11,6 +11,7 @@ export default function Sidebar() {
   const handleLogout = () => {
     // Remove o token salvo
     localStorage.removeItem("token");
+    localStorage.removeItem("role");
 
     // Remove o header Authorization (opcional mas recomendado)
     delete api.defaults.headers.common.Authorization;
