@@ -40,7 +40,7 @@ export default function LoginScreen() {
         {/* Header com gradiente */}
         <LinearGradient
           colors={['#6C63FF22', '#0f0f14']}
-          style={{ alignItems: 'center', paddingTop: 40, paddingBottom: 32, paddingHorizontal: 24 }}
+          style={{ width: '100%', alignItems: 'center', paddingTop: 40, paddingBottom: 32, paddingHorizontal: 24 }}
         >
           <View style={{ width: 80, height: 80, borderRadius: 24, backgroundColor: '#6C63FF', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
             <Ionicons name="barbell" size={40} color="white" />
