@@ -1,4 +1,12 @@
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+let _stripe = null;
+function getStripe() {
+  if (!_stripe) {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key || !key.startsWith('sk_')) throw new Error('STRIPE_SECRET_KEY inválida ou não configurada.');
+    _stripe = require('stripe')(key);
+  }
+  return _stripe;
+}
 const User = require('../models/User');
 
 // Product IDs do Stripe Sandbox
@@ -10,7 +18,7 @@ const PLANOS = {
 
 // Busca o price ID ativo de um produto
 async function getPriceId(productId) {
-  const prices = await stripe.prices.list({ product: productId, active: true, limit: 1 });
+  const prices = await getStripe().prices.list({ product: productId, active: true, limit: 1 });
   if (!prices.data.length) throw new Error(`Nenhum preço ativo para o produto ${productId}`);
   return prices.data[0].id;
 }
@@ -42,7 +50,7 @@ async function criarCheckout(req, res, next) {
     // Cria ou recupera customer no Stripe
     let customerId = user.plano?.stripeCustomerId;
     if (!customerId) {
-      const customer = await stripe.customers.create({
+      const customer = await getStripe().customers.create({
         email: user.email,
         name: user.nome || user.email,
         metadata: { userId: user._id.toString() },
@@ -52,7 +60,7 @@ async function criarCheckout(req, res, next) {
 
     const priceId = await getPriceId(planoConfig.productId);
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       customer: customerId,
       payment_method_types: ['card'],
       mode: 'subscription',
@@ -77,7 +85,7 @@ async function webhook(req, res, next) {
   let event;
 
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
+    event = getStripe().webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     return res.status(400).json({ message: `Webhook inválido: ${err.message}` });
   }
@@ -100,7 +108,7 @@ async function webhook(req, res, next) {
 
       case 'customer.subscription.updated': {
         const sub = event.data.object;
-        const customer = await stripe.customers.retrieve(sub.customer);
+        const customer = await getStripe().customers.retrieve(sub.customer);
         const userId = customer.metadata.userId;
 
         await User.findByIdAndUpdate(userId, {
@@ -112,7 +120,7 @@ async function webhook(req, res, next) {
 
       case 'customer.subscription.deleted': {
         const sub = event.data.object;
-        const customer = await stripe.customers.retrieve(sub.customer);
+        const customer = await getStripe().customers.retrieve(sub.customer);
         const userId = customer.metadata.userId;
 
         await User.findByIdAndUpdate(userId, {
@@ -138,7 +146,7 @@ async function cancelarAssinatura(req, res, next) {
       return res.status(400).json({ message: 'Nenhuma assinatura ativa.' });
     }
 
-    await stripe.subscriptions.cancel(user.plano.stripeSubscriptionId);
+    await getStripe().subscriptions.cancel(user.plano.stripeSubscriptionId);
 
     await User.findByIdAndUpdate(req.user.id, {
       'plano.tipo': 'trial',
@@ -159,7 +167,7 @@ async function minhaAssinatura(req, res, next) {
 
     let stripeData = null;
     if (user.plano?.stripeSubscriptionId) {
-      stripeData = await stripe.subscriptions.retrieve(user.plano.stripeSubscriptionId);
+      stripeData = await getStripe().subscriptions.retrieve(user.plano.stripeSubscriptionId);
     }
 
     res.json({ plano: user.plano, stripe: stripeData });
