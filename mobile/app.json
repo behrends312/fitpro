@@ -14,14 +14,21 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.fitpro.app"
+      "bundleIdentifier": "com.fitpro.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#0f0f14",
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
-      "package": "com.fitpro.app"
+      "package": "com.fitpro.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -32,15 +39,26 @@
       "expo-secure-store",
       [
         "expo-camera",
-        { "cameraPermission": "O FitPro precisa da câmera para gravar vídeos dos exercícios." }
+        {
+          "cameraPermission": "O FitPro precisa da câmera para gravar vídeos dos exercícios."
+        }
       ],
       [
         "expo-image-picker",
-        { "photosPermission": "O FitPro acessa sua galeria para selecionar fotos e vídeos." }
+        {
+          "photosPermission": "O FitPro acessa sua galeria para selecionar fotos e vídeos."
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "02ec901a-c887-41d0-ab3f-598699d0ca12"
+      }
+    },
+    "owner": "behrends312"
   }
 }
