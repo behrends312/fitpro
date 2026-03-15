@@ -4,8 +4,8 @@ module.exports = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: parseInt(process.env.PORT, 10) || 3001,
   CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
-  MONGO_URI: process.env.MONGO_URI || 'mongodb://localhost:27017/fitpro',
-  JWT_SECRET: process.env.JWT_SECRET || 'fitpro-secret-change-in-production',
+  MONGO_URI: process.env.MONGO_URI || 'mongodb://localhost:27017/athlio',
+  JWT_SECRET: process.env.JWT_SECRET || 'athlio-secret-change-in-production',
   JWT_EXPIRES: process.env.JWT_EXPIRES || '7d',
 
   // Stripe

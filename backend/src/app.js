@@ -29,7 +29,7 @@ app.use('/api', routes);
 
 // Health check na raiz
 app.get('/', (_req, res) => {
-  res.json({ ok: true, service: 'fitpro-backend', version: '2.0.0' });
+  res.json({ ok: true, service: 'athlio-backend', version: '2.0.0' });
 });
 
 // Páginas de retorno do Stripe (simples, só para não dar 404)

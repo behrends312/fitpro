@@ -3,7 +3,7 @@ const { NODE_ENV } = require('./env');
 
 async function connectDB(uri) {
   try {
-    await mongoose.connect(uri, { dbName: 'fitpro' });
+    await mongoose.connect(uri, { dbName: 'athlio' });
     console.log('[db] connected', NODE_ENV);
   } catch (err) {
     console.error('[db] connection error', err);

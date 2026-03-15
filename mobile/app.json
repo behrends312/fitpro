@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "FitPro",
-    "slug": "fitpro",
+    "name": "Athlio",
+    "slug": "athlio",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "scheme": "fitpro",
+    "scheme": "athlio",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -14,7 +14,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.fitpro.app",
+      "bundleIdentifier": "com.athlio.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -24,7 +24,7 @@
         "backgroundColor": "#0f0f14",
         "foregroundImage": "./assets/android-icon-foreground.png"
       },
-      "package": "com.fitpro.app",
+      "package": "com.athlio.app",
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
@@ -42,13 +42,13 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "O FitPro precisa da câmera para gravar vídeos dos exercícios."
+          "cameraPermission": "O Athlio precisa da câmera para gravar vídeos dos exercícios."
         }
       ],
       [
         "expo-image-picker",
         {
-          "photosPermission": "O FitPro acessa sua galeria para selecionar fotos e vídeos."
+          "photosPermission": "O Athlio acessa sua galeria para selecionar fotos e vídeos."
         }
       ]
     ],

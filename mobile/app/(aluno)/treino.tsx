@@ -6,8 +6,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import NetInfo from '@react-native-community/netinfo';
 import * as Haptics from 'expo-haptics';
 import api from '../../src/services/api';
+import * as Offline from '../../src/services/offline';
 
 interface SerieExec {
   numero: number;
@@ -41,14 +43,12 @@ interface Treino {
   }>;
 }
 
-// Dias da semana em português curto
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 function CalendarioSemana() {
   const hoje = new Date();
-  const diaSemana = hoje.getDay(); // 0=Dom
+  const diaSemana = hoje.getDay();
 
-  // Datas da semana atual (Dom a Sáb)
   const diasSemana = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(hoje);
     d.setDate(hoje.getDate() - diaSemana + i);
@@ -58,6 +58,7 @@ function CalendarioSemana() {
   const { data: historicoData } = useQuery({
     queryKey: ['sessoes-semana'],
     queryFn: () => api.get('/sessoes/historico', { params: { limit: 20 } }).then((r) => r.data),
+    retry: 0,
   });
 
   const diasComTreino = new Set<string>();
@@ -87,11 +88,7 @@ function CalendarioSemana() {
               </Text>
               <View
                 className={`w-8 h-8 rounded-full items-center justify-center ${
-                  temTreino
-                    ? 'bg-success'
-                    : ehHoje
-                    ? 'border-2 border-primary'
-                    : 'bg-background'
+                  temTreino ? 'bg-success' : ehHoje ? 'border-2 border-primary' : 'bg-background'
                 }`}
               >
                 {temTreino ? (
@@ -184,32 +181,104 @@ export default function TreinoScreen() {
   const [timerDescanso, setTimerDescanso] = useState<{ eIdx: number; segundos: number } | null>(null);
   const [elapsedSeg, setElapsedSeg] = useState(0);
   const [colapsados, setColapsados] = useState<Set<number>>(new Set());
+  const [isOnline, setIsOnline] = useState(true);
+  const isOnlineRef = useRef(true);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessaoAtivaRef = useRef<Sessao | null>(null);
 
-  const { data: treinos = [], isLoading } = useQuery<Treino[]>({
-    queryKey: ['treinos-aluno'],
-    queryFn: () => api.get('/treinos').then((r) => r.data),
-  });
+  // Mantém ref sincronizada
+  useEffect(() => { sessaoAtivaRef.current = sessaoAtiva; }, [sessaoAtiva]);
 
-  useQuery({
-    queryKey: ['sessao-ativa'],
-    queryFn: () => api.get('/sessoes/ativa').then((r) => r.data),
-    onSuccess: (data: Sessao | null) => {
-      if (data) {
-        setSessaoAtiva(data);
-        setExercicios(data.exerciciosExecutados);
-        // Colapsa todos exceto o primeiro incompleto
-        const primeiroIncompleto = data.exerciciosExecutados.findIndex(
-          (ex) => ex.series.some((s) => !s.completada)
+  // Monitor de conectividade
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      const online = !!(state.isConnected && state.isInternetReachable !== false);
+      setIsOnline(online);
+      isOnlineRef.current = online;
+      if (online) sincronizarFila();
+    });
+    NetInfo.fetch().then((state) => {
+      const online = !!(state.isConnected && state.isInternetReachable !== false);
+      setIsOnline(online);
+      isOnlineRef.current = online;
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Restaura sessão local ao abrir
+  useEffect(() => {
+    Offline.getSessaoLocal().then((local) => {
+      if (local && !sessaoAtivaRef.current) {
+        setSessaoAtiva(local);
+        setExercicios(local.exerciciosExecutados);
+        const primeiroIncompleto = local.exerciciosExecutados.findIndex(
+          (ex: ExercicioExec) => ex.series.some((s) => !s.completada)
         );
         const inicial = new Set<number>();
-        data.exerciciosExecutados.forEach((_, i) => {
+        local.exerciciosExecutados.forEach((_: any, i: number) => {
           if (i !== primeiroIncompleto) inicial.add(i);
         });
         setColapsados(inicial);
       }
+    });
+  }, []);
+
+  // Sincroniza treinos pendentes quando volta online
+  const sincronizarFila = useCallback(async () => {
+    const fila = await Offline.getFilaSync();
+    if (!fila.length) return;
+    let sincronizou = false;
+    for (const item of fila) {
+      try {
+        const sessao = await api.post('/sessoes', { treinoId: item.treinoId }).then((r) => r.data);
+        await api.post(`/sessoes/${sessao._id}/concluir`, { exerciciosExecutados: item.exerciciosExecutados });
+        sincronizou = true;
+      } catch {}
+    }
+    await Offline.clearFilaSync();
+    if (sincronizou) {
+      queryClient.invalidateQueries({ queryKey: ['sessoes-semana'] });
+    }
+  }, []);
+
+  // Carrega treinos com fallback para cache
+  const { data: treinos = [], isLoading } = useQuery<Treino[]>({
+    queryKey: ['treinos-aluno'],
+    queryFn: async () => {
+      try {
+        const data = await api.get('/treinos').then((r) => r.data);
+        Offline.cacheTreinos(data);
+        return data;
+      } catch {
+        const cached = await Offline.getCachedTreinos();
+        return cached;
+      }
     },
+    retry: 0,
   });
+
+  // Sessão ativa via API
+  const { data: sessaoAtivaDados } = useQuery({
+    queryKey: ['sessao-ativa'],
+    queryFn: () => api.get('/sessoes/ativa').then((r) => r.data),
+    retry: 0,
+  });
+
+  useEffect(() => {
+    if (sessaoAtivaDados) {
+      setSessaoAtiva(sessaoAtivaDados);
+      setExercicios(sessaoAtivaDados.exerciciosExecutados);
+      Offline.clearSessaoLocal();
+      const primeiroIncompleto = sessaoAtivaDados.exerciciosExecutados.findIndex(
+        (ex: any) => ex.series.some((s: any) => !s.completada)
+      );
+      const inicial = new Set<number>();
+      sessaoAtivaDados.exerciciosExecutados.forEach((_: any, i: number) => {
+        if (i !== primeiroIncompleto) inicial.add(i);
+      });
+      setColapsados(inicial);
+    }
+  }, [sessaoAtivaDados]);
 
   useEffect(() => {
     if (sessaoAtiva) {
@@ -225,11 +294,32 @@ export default function TreinoScreen() {
     `${String(Math.floor(seg / 60)).padStart(2, '0')}:${String(seg % 60).padStart(2, '0')}`;
 
   const iniciarMutation = useMutation({
-    mutationFn: (treinoId: string) => api.post('/sessoes', { treinoId }).then((r) => r.data),
+    mutationFn: async (treinoId: string) => {
+      if (!isOnlineRef.current) {
+        const treino = treinos.find((t) => t._id === treinoId)!;
+        const sessaoLocal: Sessao = {
+          _id: `offline_${Date.now()}`,
+          treino: { _id: treino._id, nome: treino.nome, tipo: treino.tipo },
+          exerciciosExecutados: treino.exercicios.map((ex) => ({
+            exercicio: ex.exercicio,
+            series: Array.from({ length: ex.series }, (_, i) => ({
+              numero: i + 1,
+              repsExecutadas: parseInt(ex.reps) || 0,
+              cargaUsada: ex.carga || 0,
+              completada: false,
+            })),
+          })),
+          status: 'em_andamento',
+          dataInicio: new Date().toISOString(),
+        };
+        await Offline.saveSessaoLocal(sessaoLocal);
+        return sessaoLocal;
+      }
+      return api.post('/sessoes', { treinoId }).then((r) => r.data);
+    },
     onSuccess: (data: Sessao) => {
       setSessaoAtiva(data);
       setExercicios(data.exerciciosExecutados);
-      // Apenas o primeiro exercício aberto
       const inicial = new Set<number>();
       data.exerciciosExecutados.forEach((_, i) => { if (i > 0) inicial.add(i); });
       setColapsados(inicial);
@@ -238,16 +328,47 @@ export default function TreinoScreen() {
   });
 
   const salvarMutation = useMutation({
-    mutationFn: () => api.patch(`/sessoes/${sessaoAtiva!._id}`, { exerciciosExecutados: exercicios }),
+    mutationFn: async () => {
+      const sessao = sessaoAtivaRef.current;
+      if (!sessao) return;
+      if (!isOnlineRef.current || sessao._id.startsWith('offline_')) {
+        await Offline.saveSessaoLocal({ ...sessao, exerciciosExecutados: exercicios });
+        return;
+      }
+      return api.patch(`/sessoes/${sessao._id}`, { exerciciosExecutados: exercicios });
+    },
   });
 
   const concluirMutation = useMutation({
-    mutationFn: () => api.post(`/sessoes/${sessaoAtiva!._id}/concluir`, { exerciciosExecutados: exercicios }),
+    mutationFn: async () => {
+      const sessao = sessaoAtivaRef.current;
+      if (!sessao) return;
+      const isOfflineSession = sessao._id.startsWith('offline_');
+
+      if (isOnlineRef.current && !isOfflineSession) {
+        return api.post(`/sessoes/${sessao._id}/concluir`, { exerciciosExecutados: exercicios });
+      }
+
+      // Offline ou sessão local: salva na fila de sync
+      await Offline.addFilaSync({
+        treinoId: sessao.treino._id,
+        exerciciosExecutados: exercicios,
+        dataInicio: sessao.dataInicio,
+        dataFim: new Date().toISOString(),
+      });
+      await Offline.clearSessaoLocal();
+
+      // Se voltou online, tenta sincronizar imediatamente
+      if (isOnlineRef.current) sincronizarFila();
+    },
     onSuccess: () => {
       setSessaoAtiva(null);
       setExercicios([]);
       queryClient.invalidateQueries({ queryKey: ['treinos-aluno', 'sessao-ativa', 'sessoes-semana'] });
-      Alert.alert('🎉 Treino concluído!', 'Ótimo trabalho! Seu progresso foi salvo.');
+      const msg = isOnlineRef.current
+        ? 'Ótimo trabalho! Seu progresso foi salvo.'
+        : 'Treino salvo offline. Será sincronizado quando você estiver online.';
+      Alert.alert('🎉 Treino concluído!', msg);
     },
   });
 
@@ -261,11 +382,9 @@ export default function TreinoScreen() {
           ),
         }
       );
-
       const foi = !prev[eIdx].series[sIdx].completada;
       if (foi) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        // Se todas as séries do exercício estão completas, colapsa e abre o próximo
         const todasCompletas = next[eIdx].series.every((s) => s.completada);
         if (todasCompletas && eIdx < next.length - 1) {
           setColapsados((c) => {
@@ -277,10 +396,8 @@ export default function TreinoScreen() {
         }
         setTimerDescanso({ eIdx, segundos: 60 });
       }
-
       return next;
     });
-
     setTimeout(() => salvarMutation.mutate(), 500);
   }, []);
 
@@ -309,10 +426,21 @@ export default function TreinoScreen() {
   const totalSeries = exercicios.reduce((acc, ex) => acc + ex.series.length, 0);
   const seriesFeitas = exercicios.reduce((acc, ex) => acc + ex.series.filter((s) => s.completada).length, 0);
 
+  // Banner de offline
+  const BannerOffline = () => (
+    !isOnline ? (
+      <View className="bg-yellow-500/20 border-b border-yellow-500/30 px-5 py-2 flex-row items-center gap-2">
+        <Ionicons name="cloud-offline-outline" size={14} color="#eab308" />
+        <Text className="text-yellow-500 text-xs">Sem internet — treino salvo localmente</Text>
+      </View>
+    ) : null
+  );
+
   // =============== TELA: Sem sessão ativa ===============
   if (!sessaoAtiva) {
     return (
       <SafeAreaView className="flex-1 bg-background">
+        <BannerOffline />
         <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
           <View className="px-5 pt-4 pb-2">
             <Text className="text-textPrimary text-2xl font-bold mb-1">Hoje é dia de treinar 💪</Text>
@@ -328,7 +456,9 @@ export default function TreinoScreen() {
               <View className="items-center py-16">
                 <Ionicons name="barbell-outline" size={64} color="#2e2e40" />
                 <Text className="text-textSecondary text-center mt-4 text-base">
-                  Nenhum treino cadastrado ainda.{'\n'}Aguarde seu personal criar seus treinos.
+                  {isOnline
+                    ? 'Nenhum treino cadastrado ainda.\nAguarde seu personal criar seus treinos.'
+                    : 'Sem internet e nenhum treino em cache.\nAbra o app online ao menos uma vez.'}
                 </Text>
               </View>
             ) : (
@@ -371,7 +501,6 @@ export default function TreinoScreen() {
                       </View>
                     </View>
 
-                    {/* Exercícios preview */}
                     <View className="mb-3">
                       {treino.exercicios.slice(0, 3).map((ex, i) => (
                         <Text key={i} className="text-textMuted text-xs mb-0.5">· {ex.exercicio.nome}</Text>
@@ -406,7 +535,8 @@ export default function TreinoScreen() {
   // =============== TELA: Treino em andamento ===============
   return (
     <SafeAreaView className="flex-1 bg-background">
-      {/* Header do treino ativo */}
+      <BannerOffline />
+
       <View className="px-5 pt-2 pb-4 border-b border-border">
         <View className="flex-row justify-between items-center">
           <View>
@@ -424,7 +554,6 @@ export default function TreinoScreen() {
         </View>
       </View>
 
-      {/* Timer de descanso */}
       <Modal visible={timerDescanso !== null} transparent animationType="fade">
         <View className="flex-1 bg-black/80 items-center justify-center px-6">
           <View className="bg-surface border border-border rounded-3xl w-full p-8">
@@ -433,7 +562,6 @@ export default function TreinoScreen() {
         </View>
       </Modal>
 
-      {/* Lista de exercícios colapsáveis */}
       <ScrollView className="flex-1 px-5 pt-4" keyboardShouldPersistTaps="handled">
         {exercicios.map((ex, eIdx) => {
           const feitos = ex.series.filter((s) => s.completada).length;
@@ -443,7 +571,6 @@ export default function TreinoScreen() {
 
           return (
             <View key={eIdx} className={`mb-3 rounded-2xl border overflow-hidden ${completo ? 'border-success/30 bg-success/5' : 'border-border bg-surface'}`}>
-              {/* Header do exercício — clicável para colapsar */}
               <TouchableOpacity
                 onPress={() => toggleColapso(eIdx)}
                 className="flex-row justify-between items-center p-4"
@@ -463,7 +590,6 @@ export default function TreinoScreen() {
                 </View>
               </TouchableOpacity>
 
-              {/* Conteúdo colapsável */}
               {!colapsado && (
                 <View className="px-4 pb-4">
                   <View className="flex-row items-center px-4 mb-2">
@@ -488,7 +614,6 @@ export default function TreinoScreen() {
           );
         })}
 
-        {/* Botão concluir */}
         <TouchableOpacity
           onPress={() => {
             Alert.alert(

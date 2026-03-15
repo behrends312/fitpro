@@ -36,23 +36,23 @@ export default function LoginScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       className="flex-1 bg-background"
     >
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }} keyboardShouldPersistTaps="handled">
         {/* Header com gradiente */}
         <LinearGradient
           colors={['#6C63FF22', '#0f0f14']}
-          className="px-6 pt-20 pb-10 items-center"
+          className="px-6 pt-10 pb-8 items-center"
         >
           <View className="w-20 h-20 rounded-3xl bg-primary items-center justify-center mb-4">
             <Ionicons name="barbell" size={40} color="white" />
           </View>
-          <Text className="text-textPrimary text-3xl font-bold">FitPro</Text>
+          <Text className="text-textPrimary text-3xl font-bold">Athlio</Text>
           <Text className="text-textSecondary text-base mt-1">Treine com propósito</Text>
         </LinearGradient>
 
         {/* Formulário */}
         <View className="flex-1 px-6 pt-6">
           <Text className="text-textPrimary text-2xl font-bold mb-1">Bem-vindo de volta 👋</Text>
-          <Text className="text-textSecondary text-sm mb-8">Entre com sua conta para continuar</Text>
+          <Text className="text-textSecondary text-sm mb-6">Entre com sua conta para continuar</Text>
 
           {/* E-mail */}
           <Text className="text-textSecondary text-xs font-semibold mb-2 tracking-widest uppercase">E-mail</Text>
