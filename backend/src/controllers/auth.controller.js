@@ -4,7 +4,7 @@ const User = require('../models/User');
 const { JWT_SECRET, JWT_EXPIRES } = require('../config/env');
 
 function signToken(user) {
-  return jwt.sign({ sub: user._id, role: user.role }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
+  return jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: JWT_EXPIRES });
 }
 
 async function register(req, res, next) {
@@ -23,7 +23,7 @@ async function register(req, res, next) {
     const token = signToken(user);
     return res.status(201).json({
       token,
-      user: { id: user._id, email: user.email, role: user.role }
+      user: { id: user._id, email: user.email, role: user.role, nome: user.nome, foto: user.foto }
     });
   } catch (err) {
     next(err);
@@ -48,7 +48,7 @@ async function login(req, res, next) {
     const token = signToken(user);
     return res.json({
       token,
-      user: { id: user._id, email: user.email, role: user.role }
+      user: { id: user._id, email: user.email, role: user.role, nome: user.nome, foto: user.foto }
     });
   } catch (err) {
     next(err);

@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "FitPro",
+    "slug": "fitpro",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "scheme": "fitpro",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f0f14"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.fitpro.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0f0f14",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      },
+      "package": "com.fitpro.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        { "cameraPermission": "O FitPro precisa da câmera para gravar vídeos dos exercícios." }
+      ],
+      [
+        "expo-image-picker",
+        { "photosPermission": "O FitPro acessa sua galeria para selecionar fotos e vídeos." }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
