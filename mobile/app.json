@@ -63,7 +63,7 @@
     },
     "owner": "behrends312",
     "runtimeVersion": {
-      "policy": "appVersion"
+      "policy": "sdkVersion"
     },
     "updates": {
       "url": "https://u.expo.dev/02ec901a-c887-41d0-ab3f-598699d0ca12"
