@@ -27,6 +27,8 @@
       "package": "com.fitpro.app",
       "permissions": [
         "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO"
       ]
     },
@@ -59,6 +61,12 @@
         "projectId": "02ec901a-c887-41d0-ab3f-598699d0ca12"
       }
     },
-    "owner": "behrends312"
+    "owner": "behrends312",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/02ec901a-c887-41d0-ab3f-598699d0ca12"
+    }
   }
 }
