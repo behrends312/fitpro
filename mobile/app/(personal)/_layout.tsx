@@ -48,6 +48,13 @@ export default function PersonalLayout() {
         }}
       />
       <Tabs.Screen
+        name="ia-treino"
+        options={{
+          title: 'IA',
+          tabBarIcon: ({ color, size }) => <Ionicons name="sparkles-outline" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="perfil"
         options={{
           title: 'Perfil',

@@ -4,7 +4,7 @@ const bcrypt = require('bcryptjs');
 // GET /users/me
 async function getMe(req, res, next) {
   try {
-    const user = await User.findById(req.user.id).select('-password');
+    const user = await User.findById(req.user.id).select('-password').populate('personalId', 'nome email');
     if (!user) return res.status(404).json({ message: 'Usuário não encontrado.' });
     res.json(user);
   } catch (err) {

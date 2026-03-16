@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
   ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Modal,
@@ -37,14 +37,17 @@ export default function PerfilAlunoScreen() {
   const { data: perfil, isLoading, refetch } = useQuery<MeuPerfil>({
     queryKey: ['meu-perfil'],
     queryFn: () => api.get('/users/me').then((r) => r.data),
-    onSuccess: (data) => {
-      setNome(data.nome);
-      setTelefone(data.telefone);
-      setObjetivo(data.objetivo);
-      setPeso(data.peso ? String(data.peso) : '');
-      setAltura(data.altura ? String(data.altura) : '');
-    },
   });
+
+  useEffect(() => {
+    if (perfil) {
+      setNome(perfil.nome || '');
+      setTelefone(perfil.telefone || '');
+      setObjetivo(perfil.objetivo || '');
+      setPeso(perfil.peso ? String(perfil.peso) : '');
+      setAltura(perfil.altura ? String(perfil.altura) : '');
+    }
+  }, [perfil]);
 
   const atualizarMutation = useMutation({
     mutationFn: async (formData: FormData) => {
@@ -183,33 +186,25 @@ export default function PerfilAlunoScreen() {
           )}
         </View>
 
-        {/* Stats físicos */}
-        {(perfil?.peso || perfil?.altura) && (
-          <View className="flex-row mx-5 gap-3 mb-5">
-            {perfil.peso && (
-              <View className="flex-1 bg-surface border border-border rounded-2xl p-4 items-center">
-                <Ionicons name="scale-outline" size={20} color="#9090a8" />
-                <Text className="text-textPrimary text-2xl font-bold mt-1">{perfil.peso}</Text>
-                <Text className="text-textMuted text-xs">kg</Text>
-              </View>
-            )}
-            {perfil.altura && (
-              <View className="flex-1 bg-surface border border-border rounded-2xl p-4 items-center">
-                <Ionicons name="resize-outline" size={20} color="#9090a8" />
-                <Text className="text-textPrimary text-2xl font-bold mt-1">{perfil.altura}</Text>
-                <Text className="text-textMuted text-xs">cm</Text>
-              </View>
-            )}
-            {imc && (
-              <TouchableOpacity onPress={() => setImcModal(true)} className="flex-1 bg-surface border border-primary/30 rounded-2xl p-4 items-center">
-                <Ionicons name="fitness-outline" size={20} color="#6C63FF" />
-                <Text className="text-textPrimary text-2xl font-bold mt-1">{imc}</Text>
-                <Text className="text-textMuted text-xs">IMC</Text>
-                <Ionicons name="information-circle-outline" size={14} color="#6C63FF" style={{ marginTop: 4 }} />
-              </TouchableOpacity>
-            )}
+        {/* Stats físicos — sempre visível */}
+        <View className="flex-row mx-5 gap-3 mb-5">
+          <View className="flex-1 bg-surface border border-border rounded-2xl p-4 items-center">
+            <Ionicons name="scale-outline" size={20} color="#9090a8" />
+            <Text className="text-textPrimary text-2xl font-bold mt-1">{perfil?.peso ?? '--'}</Text>
+            <Text className="text-textMuted text-xs">kg</Text>
           </View>
-        )}
+          <View className="flex-1 bg-surface border border-border rounded-2xl p-4 items-center">
+            <Ionicons name="resize-outline" size={20} color="#9090a8" />
+            <Text className="text-textPrimary text-2xl font-bold mt-1">{perfil?.altura ?? '--'}</Text>
+            <Text className="text-textMuted text-xs">cm</Text>
+          </View>
+          <TouchableOpacity onPress={() => setImcModal(true)} className="flex-1 bg-surface border border-primary/30 rounded-2xl p-4 items-center">
+            <Ionicons name="fitness-outline" size={20} color="#6C63FF" />
+            <Text className="text-textPrimary text-2xl font-bold mt-1">{imc ?? '--'}</Text>
+            <Text className="text-textMuted text-xs">IMC</Text>
+            <Ionicons name="information-circle-outline" size={14} color="#6C63FF" style={{ marginTop: 4 }} />
+          </TouchableOpacity>
+        </View>
 
         {/* Formulário */}
         <View className="px-5 mb-8">

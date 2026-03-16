@@ -9,6 +9,7 @@ const sessaoRoutes = require('./sessao.routes');
 const progressoRoutes = require('./progresso.routes');
 const adminRoutes = require('./admin.routes');
 const stripeRoutes = require('./stripe.routes');
+const iaRoutes = require('./ia.routes');
 
 const router = Router();
 
@@ -21,5 +22,6 @@ router.use('/sessoes', sessaoRoutes);
 router.use('/progresso', progressoRoutes);
 router.use('/admin', adminRoutes);
 router.use('/stripe', stripeRoutes);
+router.use('/ia', iaRoutes);
 
 module.exports = router;
