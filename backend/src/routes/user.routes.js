@@ -3,7 +3,7 @@ const { authenticate } = require('../middlewares/auth');
 const { authorize } = require('../middlewares/role');
 const { uploadImage } = require('../middlewares/upload');
 const {
-  getMe, updateMe, listarMeusAlunos, getAluno, criarAluno, removerAluno,
+  getMe, updateMe, listarMeusAlunos, getAluno, criarAluno, editarAluno, removerAluno,
 } = require('../controllers/user.controller');
 
 const router = Router();
@@ -18,6 +18,7 @@ router.patch('/me', uploadImage.single('foto'), updateMe);
 router.get('/alunos', authorize('personal', 'admin'), listarMeusAlunos);
 router.get('/alunos/:id', authorize('personal', 'admin'), getAluno);
 router.post('/alunos', authorize('personal'), criarAluno);
+router.patch('/alunos/:id', authorize('personal'), editarAluno);
 router.delete('/alunos/:id', authorize('personal'), removerAluno);
 
 module.exports = router;

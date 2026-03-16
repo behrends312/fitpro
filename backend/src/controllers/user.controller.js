@@ -114,6 +114,27 @@ async function criarAluno(req, res, next) {
   }
 }
 
+// PATCH /users/alunos/:id — personal edita dados do aluno
+async function editarAluno(req, res, next) {
+  try {
+    const aluno = await User.findOne({ _id: req.params.id, personalId: req.user.id, role: 'aluno' });
+    if (!aluno) return res.status(404).json({ message: 'Aluno não encontrado.' });
+
+    const { nome, telefone, objetivo, peso, altura } = req.body;
+    if (nome !== undefined) aluno.nome = nome;
+    if (telefone !== undefined) aluno.telefone = telefone;
+    if (objetivo !== undefined) aluno.objetivo = objetivo;
+    if (peso !== undefined) aluno.peso = peso || null;
+    if (altura !== undefined) aluno.altura = altura || null;
+
+    await aluno.save();
+    const { password: _, ...data } = aluno.toObject();
+    res.json(data);
+  } catch (err) {
+    next(err);
+  }
+}
+
 // DELETE /users/alunos/:id — personal desvincula aluno
 async function removerAluno(req, res, next) {
   try {
@@ -127,4 +148,4 @@ async function removerAluno(req, res, next) {
   }
 }
 
-module.exports = { getMe, updateMe, listarMeusAlunos, getAluno, criarAluno, removerAluno };
+module.exports = { getMe, updateMe, listarMeusAlunos, getAluno, criarAluno, editarAluno, removerAluno };

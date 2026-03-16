@@ -21,22 +21,56 @@ interface Aluno {
   createdAt: string;
 }
 
+function enviarWhatsApp(nome: string, email: string, senha: string, telefone: string) {
+  const msg = `Olá ${nome}! 👋\n\nSeu acesso ao *Athlio* está pronto:\n\n📧 E-mail: ${email}\n🔑 Senha: ${senha}\n\nBaixe o app e comece a treinar!`;
+  const phone = telefone.replace(/\D/g, '');
+  const url = phone
+    ? `whatsapp://send?phone=55${phone}&text=${encodeURIComponent(msg)}`
+    : `whatsapp://send?text=${encodeURIComponent(msg)}`;
+  Linking.openURL(url);
+}
+
+function CampoTexto({ label, value, onChangeText, placeholder, keyboardType, autoCapitalize }: any) {
+  return (
+    <View className="mb-4">
+      <Text className="text-textSecondary text-xs font-semibold mb-2 uppercase tracking-widest">{label}</Text>
+      <View className="bg-background border border-border rounded-xl px-4">
+        <TextInput
+          className="text-textPrimary py-3.5 text-base"
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor="#5a5a70"
+          keyboardType={keyboardType || 'default'}
+          autoCapitalize={autoCapitalize || 'sentences'}
+        />
+      </View>
+    </View>
+  );
+}
+
 function ModalNovoAluno({ visivel, onFechar }: { visivel: boolean; onFechar: () => void }) {
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
+  const [telefone, setTelefone] = useState('');
   const [senha, setSenha] = useState('');
   const [objetivo, setObjetivo] = useState('');
   const queryClient = useQueryClient();
 
+  function limpar() {
+    setNome(''); setEmail(''); setTelefone(''); setSenha(''); setObjetivo('');
+  }
+
   const criarMutation = useMutation({
-    mutationFn: () => api.post('/users/alunos', { nome, email, senha: senha || '123456', objetivo }),
+    mutationFn: () => api.post('/users/alunos', { nome, email, telefone, senha: senha || '123456', objetivo }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['meus-alunos'] });
       const senhaFinal = senha || '123456';
       const nomeCapturado = nome;
       const emailCapturado = email;
+      const telefoneCapturado = telefone;
       onFechar();
-      setNome(''); setEmail(''); setSenha(''); setObjetivo('');
+      limpar();
       Alert.alert(
         'Aluno adicionado!',
         'Deseja enviar os dados de acesso via WhatsApp?',
@@ -44,10 +78,7 @@ function ModalNovoAluno({ visivel, onFechar }: { visivel: boolean; onFechar: () 
           { text: 'Agora não', style: 'cancel' },
           {
             text: 'Enviar WhatsApp',
-            onPress: () => {
-              const msg = `Olá ${nomeCapturado}! 👋\n\nSeu acesso ao *Athlio* está pronto:\n\n📧 E-mail: ${emailCapturado}\n🔑 Senha: ${senhaFinal}\n\nBaixe o app e comece a treinar!`;
-              Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`);
-            },
+            onPress: () => enviarWhatsApp(nomeCapturado, emailCapturado, senhaFinal, telefoneCapturado),
           },
         ]
       );
@@ -56,60 +87,104 @@ function ModalNovoAluno({ visivel, onFechar }: { visivel: boolean; onFechar: () 
   });
 
   return (
-    <Modal visible={visivel} transparent animationType="slide">
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
-      >
+    <Modal visible={visivel} transparent animationType="slide" onRequestClose={onFechar}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
         <View className="flex-1 bg-black/70 justify-end">
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          bounces={false}
-          contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
-        >
-        <View className="bg-surface rounded-t-3xl px-6 pt-6 pb-10">
-          <View className="flex-row justify-between items-center mb-6">
-            <Text className="text-textPrimary text-xl font-bold">Novo Aluno</Text>
-            <TouchableOpacity onPress={onFechar}>
-              <Ionicons name="close" size={24} color="#9090a8" />
-            </TouchableOpacity>
-          </View>
-
-          {[
-            { label: 'Nome', value: nome, setter: setNome, placeholder: 'Nome do aluno', cap: 'words' as const },
-            { label: 'E-mail', value: email, setter: setEmail, placeholder: 'email@exemplo.com', kb: 'email-address' as const, cap: 'none' as const },
-            { label: 'Senha inicial (opcional)', value: senha, setter: setSenha, placeholder: 'Padrão: 123456' },
-            { label: 'Objetivo (opcional)', value: objetivo, setter: setObjetivo, placeholder: 'Ex: Ganhar massa' },
-          ].map((c) => (
-            <View key={c.label} className="mb-4">
-              <Text className="text-textSecondary text-xs font-semibold mb-2 uppercase tracking-widest">{c.label}</Text>
-              <View className="bg-background border border-border rounded-xl px-4">
-                <TextInput
-                  className="text-textPrimary py-3.5 text-base"
-                  value={c.value}
-                  onChangeText={c.setter}
-                  placeholder={c.placeholder}
-                  placeholderTextColor="#5a5a70"
-                  keyboardType={(c as any).kb || 'default'}
-                  autoCapitalize={(c as any).cap || 'sentences'}
-                />
+          <ScrollView keyboardShouldPersistTaps="handled" bounces={false} contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}>
+            <View className="bg-surface rounded-t-3xl px-6 pt-6 pb-10">
+              <View className="flex-row justify-between items-center mb-6">
+                <Text className="text-textPrimary text-xl font-bold">Novo Aluno</Text>
+                <TouchableOpacity onPress={onFechar}>
+                  <Ionicons name="close" size={24} color="#9090a8" />
+                </TouchableOpacity>
               </View>
-            </View>
-          ))}
 
-          <TouchableOpacity
-            onPress={() => criarMutation.mutate()}
-            disabled={criarMutation.isPending || !nome || !email}
-            className="bg-primary rounded-xl py-4 items-center mt-2"
-          >
-            {criarMutation.isPending ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text className="text-white font-bold text-base">Adicionar Aluno</Text>
-            )}
-          </TouchableOpacity>
+              <CampoTexto label="Nome" value={nome} onChangeText={setNome} placeholder="Nome do aluno" autoCapitalize="words" />
+              <CampoTexto label="E-mail" value={email} onChangeText={setEmail} placeholder="email@exemplo.com" keyboardType="email-address" autoCapitalize="none" />
+              <CampoTexto label="WhatsApp (opcional)" value={telefone} onChangeText={setTelefone} placeholder="(11) 99999-9999" keyboardType="phone-pad" autoCapitalize="none" />
+              <CampoTexto label="Senha inicial (opcional)" value={senha} onChangeText={setSenha} placeholder="Padrão: 123456" />
+              <CampoTexto label="Objetivo (opcional)" value={objetivo} onChangeText={setObjetivo} placeholder="Ex: Ganhar massa" />
+
+              <TouchableOpacity
+                onPress={() => criarMutation.mutate()}
+                disabled={criarMutation.isPending || !nome || !email}
+                className="bg-primary rounded-xl py-4 items-center mt-2"
+              >
+                {criarMutation.isPending ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text className="text-white font-bold text-base">Adicionar Aluno</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
         </View>
-        </ScrollView>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+function ModalEditarAluno({ aluno, onFechar }: { aluno: Aluno | null; onFechar: () => void }) {
+  const [nome, setNome] = useState(aluno?.nome || '');
+  const [telefone, setTelefone] = useState(aluno?.telefone || '');
+  const [objetivo, setObjetivo] = useState(aluno?.objetivo || '');
+  const [peso, setPeso] = useState(aluno?.peso ? String(aluno.peso) : '');
+  const [altura, setAltura] = useState(aluno?.altura ? String(aluno.altura) : '');
+  const queryClient = useQueryClient();
+
+  const editarMutation = useMutation({
+    mutationFn: () => api.patch(`/users/alunos/${aluno!._id}`, {
+      nome, telefone, objetivo,
+      peso: peso ? parseFloat(peso) : null,
+      altura: altura ? parseFloat(altura) : null,
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['meus-alunos'] });
+      onFechar();
+    },
+    onError: (err: any) => Alert.alert('Erro', err?.response?.data?.message || 'Não foi possível editar o aluno.'),
+  });
+
+  if (!aluno) return null;
+
+  return (
+    <Modal visible={!!aluno} transparent animationType="slide" onRequestClose={onFechar}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+        <View className="flex-1 bg-black/70 justify-end">
+          <ScrollView keyboardShouldPersistTaps="handled" bounces={false} contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}>
+            <View className="bg-surface rounded-t-3xl px-6 pt-6 pb-10">
+              <View className="flex-row justify-between items-center mb-6">
+                <Text className="text-textPrimary text-xl font-bold">Editar Aluno</Text>
+                <TouchableOpacity onPress={onFechar}>
+                  <Ionicons name="close" size={24} color="#9090a8" />
+                </TouchableOpacity>
+              </View>
+
+              <CampoTexto label="Nome" value={nome} onChangeText={setNome} placeholder="Nome do aluno" autoCapitalize="words" />
+              <CampoTexto label="WhatsApp" value={telefone} onChangeText={setTelefone} placeholder="(11) 99999-9999" keyboardType="phone-pad" autoCapitalize="none" />
+              <CampoTexto label="Objetivo" value={objetivo} onChangeText={setObjetivo} placeholder="Ex: Ganhar massa" />
+              <View className="flex-row gap-3">
+                <View className="flex-1">
+                  <CampoTexto label="Peso (kg)" value={peso} onChangeText={setPeso} placeholder="Ex: 80" keyboardType="numeric" />
+                </View>
+                <View className="flex-1">
+                  <CampoTexto label="Altura (cm)" value={altura} onChangeText={setAltura} placeholder="Ex: 175" keyboardType="numeric" />
+                </View>
+              </View>
+
+              <TouchableOpacity
+                onPress={() => editarMutation.mutate()}
+                disabled={editarMutation.isPending || !nome}
+                className="bg-primary rounded-xl py-4 items-center mt-2"
+              >
+                {editarMutation.isPending ? (
+                  <ActivityIndicator color="white" />
+                ) : (
+                  <Text className="text-white font-bold text-base">Salvar alterações</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -119,6 +194,7 @@ function ModalNovoAluno({ visivel, onFechar }: { visivel: boolean; onFechar: () 
 export default function AlunosScreen() {
   const [busca, setBusca] = useState('');
   const [modalAberto, setModalAberto] = useState(false);
+  const [alunoEditando, setAlunoEditando] = useState<Aluno | null>(null);
   const queryClient = useQueryClient();
 
   const { data: alunos = [], isLoading } = useQuery<Aluno[]>({
@@ -131,6 +207,17 @@ export default function AlunosScreen() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['meus-alunos'] }),
     onError: () => Alert.alert('Erro', 'Não foi possível remover o aluno.'),
   });
+
+  function confirmarRemocao(aluno: Aluno) {
+    Alert.alert(
+      'Remover aluno?',
+      `${aluno.nome || aluno.email} será desvinculado da sua conta.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Remover', style: 'destructive', onPress: () => removerMutation.mutate(aluno._id) },
+      ]
+    );
+  }
 
   const alunosFiltrados = alunos.filter((a) =>
     a.nome?.toLowerCase().includes(busca.toLowerCase()) ||
@@ -181,20 +268,8 @@ export default function AlunosScreen() {
             </View>
           }
           renderItem={({ item: aluno }) => (
-            <TouchableOpacity
-              className="bg-surface border border-border rounded-2xl p-4 mb-3"
-              onLongPress={() =>
-                Alert.alert('Remover aluno?', aluno.nome || aluno.email, [
-                  { text: 'Cancelar', style: 'cancel' },
-                  {
-                    text: 'Remover',
-                    style: 'destructive',
-                    onPress: () => removerMutation.mutate(aluno._id),
-                  },
-                ])
-              }
-            >
-              <View className="flex-row items-center">
+            <View className="bg-surface border border-border rounded-2xl p-4 mb-3">
+              <View className="flex-row items-center mb-3">
                 <View className="w-14 h-14 rounded-2xl bg-primary/20 items-center justify-center mr-4">
                   <Text className="text-primary font-bold text-xl">
                     {(aluno.nome || aluno.email)[0].toUpperCase()}
@@ -203,6 +278,9 @@ export default function AlunosScreen() {
                 <View className="flex-1">
                   <Text className="text-textPrimary font-bold text-base">{aluno.nome || 'Sem nome'}</Text>
                   <Text className="text-textMuted text-xs">{aluno.email}</Text>
+                  {aluno.telefone ? (
+                    <Text className="text-textMuted text-xs mt-0.5">{aluno.telefone}</Text>
+                  ) : null}
                   {aluno.objetivo ? (
                     <View className="flex-row items-center gap-1 mt-1">
                       <Ionicons name="flag-outline" size={11} color="#9090a8" />
@@ -210,27 +288,50 @@ export default function AlunosScreen() {
                     </View>
                   ) : null}
                 </View>
-                <View className="items-end gap-2">
-                  <TouchableOpacity
-                    onPress={() => router.push({
-                      pathname: '/(personal)/treinos',
-                      params: { alunoId: aluno._id, alunoNome: aluno.nome },
-                    })}
-                    className="bg-primary/10 px-3 py-1.5 rounded-lg"
-                  >
-                    <Text className="text-primary text-xs font-semibold">Ver treinos</Text>
-                  </TouchableOpacity>
-                  {aluno.peso && aluno.altura ? (
-                    <Text className="text-textMuted text-xs">{aluno.peso}kg · {aluno.altura}cm</Text>
-                  ) : null}
-                </View>
               </View>
-            </TouchableOpacity>
+
+              {/* Ações */}
+              <View className="flex-row gap-2">
+                <TouchableOpacity
+                  onPress={() => router.push({
+                    pathname: '/(personal)/treinos',
+                    params: { alunoId: aluno._id, alunoNome: aluno.nome },
+                  })}
+                  className="flex-1 bg-primary/10 py-2 rounded-xl items-center"
+                >
+                  <Text className="text-primary text-xs font-semibold">Ver treinos</Text>
+                </TouchableOpacity>
+
+                {aluno.telefone ? (
+                  <TouchableOpacity
+                    onPress={() => enviarWhatsApp(aluno.nome, aluno.email, '••••••', aluno.telefone)}
+                    className="w-9 h-9 bg-green-500/10 rounded-xl items-center justify-center"
+                  >
+                    <Ionicons name="logo-whatsapp" size={18} color="#22c55e" />
+                  </TouchableOpacity>
+                ) : null}
+
+                <TouchableOpacity
+                  onPress={() => setAlunoEditando(aluno)}
+                  className="w-9 h-9 bg-surface border border-border rounded-xl items-center justify-center"
+                >
+                  <Ionicons name="pencil-outline" size={16} color="#9090a8" />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  onPress={() => confirmarRemocao(aluno)}
+                  className="w-9 h-9 bg-red-500/10 rounded-xl items-center justify-center"
+                >
+                  <Ionicons name="trash-outline" size={16} color="#f87171" />
+                </TouchableOpacity>
+              </View>
+            </View>
           )}
         />
       )}
 
       <ModalNovoAluno visivel={modalAberto} onFechar={() => setModalAberto(false)} />
+      <ModalEditarAluno aluno={alunoEditando} onFechar={() => setAlunoEditando(null)} />
     </SafeAreaView>
   );
 }
