@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform,
+  ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,6 +27,7 @@ interface MeuPerfil {
 export default function PerfilAlunoScreen() {
   const { user, logout, updateUser } = useAuthStore();
   const [editando, setEditando] = useState(false);
+  const [imcModal, setImcModal] = useState(false);
   const [nome, setNome] = useState('');
   const [telefone, setTelefone] = useState('');
   const [objetivo, setObjetivo] = useState('');
@@ -97,8 +98,56 @@ export default function PerfilAlunoScreen() {
     ? (perfil.peso / Math.pow(perfil.altura / 100, 2)).toFixed(1)
     : null;
 
+  const imcNum = imc ? parseFloat(imc) : null;
+  const imcClassificacao = imcNum
+    ? imcNum < 18.5 ? { label: 'Abaixo do peso', color: '#60a5fa' }
+    : imcNum < 25 ? { label: 'Peso normal', color: '#4ade80' }
+    : imcNum < 30 ? { label: 'Sobrepeso', color: '#facc15' }
+    : imcNum < 35 ? { label: 'Obesidade grau I', color: '#fb923c' }
+    : imcNum < 40 ? { label: 'Obesidade grau II', color: '#f87171' }
+    : { label: 'Obesidade grau III', color: '#dc2626' }
+    : null;
+
   return (
     <SafeAreaView className="flex-1 bg-background">
+      {/* Modal IMC */}
+      <Modal visible={imcModal} transparent animationType="fade" onRequestClose={() => setImcModal(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: 24 }}>
+          <View className="bg-surface rounded-3xl p-6">
+            <View className="flex-row justify-between items-center mb-4">
+              <Text className="text-textPrimary text-xl font-bold">O que é o IMC?</Text>
+              <TouchableOpacity onPress={() => setImcModal(false)}>
+                <Ionicons name="close" size={24} color="#9090a8" />
+              </TouchableOpacity>
+            </View>
+            <Text className="text-textSecondary text-sm mb-4">
+              O Índice de Massa Corporal (IMC) é uma medida que relaciona peso e altura para estimar se o peso está adequado para a estatura.{'\n\n'}
+              Fórmula: Peso (kg) ÷ Altura² (m)
+            </Text>
+            {imcNum && imcClassificacao && (
+              <View style={{ backgroundColor: imcClassificacao.color + '20', borderColor: imcClassificacao.color + '50', borderWidth: 1 }} className="rounded-xl p-3 mb-4 items-center">
+                <Text className="text-textSecondary text-xs mb-1">Seu IMC: {imc}</Text>
+                <Text style={{ color: imcClassificacao.color }} className="font-bold text-base">{imcClassificacao.label}</Text>
+              </View>
+            )}
+            <Text className="text-textSecondary text-xs font-semibold mb-2 uppercase tracking-widest">Tabela de classificação</Text>
+            {[
+              { range: '< 18,5', label: 'Abaixo do peso', color: '#60a5fa' },
+              { range: '18,5 – 24,9', label: 'Peso normal', color: '#4ade80' },
+              { range: '25 – 29,9', label: 'Sobrepeso', color: '#facc15' },
+              { range: '30 – 34,9', label: 'Obesidade grau I', color: '#fb923c' },
+              { range: '35 – 39,9', label: 'Obesidade grau II', color: '#f87171' },
+              { range: '≥ 40', label: 'Obesidade grau III', color: '#dc2626' },
+            ].map((item) => (
+              <View key={item.range} className="flex-row items-center justify-between py-2 border-b border-border">
+                <Text className="text-textMuted text-sm">{item.range}</Text>
+                <Text style={{ color: item.color }} className="text-sm font-semibold">{item.label}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      </Modal>
+
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Header */}
@@ -152,11 +201,12 @@ export default function PerfilAlunoScreen() {
               </View>
             )}
             {imc && (
-              <View className="flex-1 bg-surface border border-border rounded-2xl p-4 items-center">
-                <Ionicons name="fitness-outline" size={20} color="#9090a8" />
+              <TouchableOpacity onPress={() => setImcModal(true)} className="flex-1 bg-surface border border-primary/30 rounded-2xl p-4 items-center">
+                <Ionicons name="fitness-outline" size={20} color="#6C63FF" />
                 <Text className="text-textPrimary text-2xl font-bold mt-1">{imc}</Text>
                 <Text className="text-textMuted text-xs">IMC</Text>
-              </View>
+                <Ionicons name="information-circle-outline" size={14} color="#6C63FF" style={{ marginTop: 4 }} />
+              </TouchableOpacity>
             )}
           </View>
         )}

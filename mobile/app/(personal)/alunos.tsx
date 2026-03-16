@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput, Modal,
-  Alert, ActivityIndicator, FlatList, KeyboardAvoidingView, Platform,
+  Alert, ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,9 +32,25 @@ function ModalNovoAluno({ visivel, onFechar }: { visivel: boolean; onFechar: () 
     mutationFn: () => api.post('/users/alunos', { nome, email, senha: senha || '123456', objetivo }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['meus-alunos'] });
+      const senhaFinal = senha || '123456';
+      const nomeCapturado = nome;
+      const emailCapturado = email;
       onFechar();
       setNome(''); setEmail(''); setSenha(''); setObjetivo('');
-      Alert.alert('Aluno adicionado!', 'O aluno foi vinculado à sua conta.');
+      Alert.alert(
+        'Aluno adicionado!',
+        'Deseja enviar os dados de acesso via WhatsApp?',
+        [
+          { text: 'Agora não', style: 'cancel' },
+          {
+            text: 'Enviar WhatsApp',
+            onPress: () => {
+              const msg = `Olá ${nomeCapturado}! 👋\n\nSeu acesso ao *Athlio* está pronto:\n\n📧 E-mail: ${emailCapturado}\n🔑 Senha: ${senhaFinal}\n\nBaixe o app e comece a treinar!`;
+              Linking.openURL(`whatsapp://send?text=${encodeURIComponent(msg)}`);
+            },
+          },
+        ]
+      );
     },
     onError: (err: any) => Alert.alert('Erro', err?.response?.data?.message || 'Não foi possível adicionar o aluno.'),
   });
