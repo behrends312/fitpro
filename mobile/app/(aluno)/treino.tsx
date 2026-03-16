@@ -175,6 +175,15 @@ function LinhaSerie({
   );
 }
 
+interface GamificacaoResultado {
+  xpGanho: number;
+  xpTotal: number;
+  nivel: number;
+  xpProximoNivel: number | null;
+  streak: number;
+  badgesNovos: Array<{ id: string; nome: string; descricao: string; icone: string }>;
+}
+
 export default function TreinoScreen() {
   const queryClient = useQueryClient();
   const [sessaoAtiva, setSessaoAtiva] = useState<Sessao | null>(null);
@@ -184,6 +193,7 @@ export default function TreinoScreen() {
   const [colapsados, setColapsados] = useState<Set<number>>(new Set());
   const [isOnline, setIsOnline] = useState(true);
   const [videoAtivo, setVideoAtivo] = useState<string | null>(null);
+  const [gamiResultado, setGamiResultado] = useState<GamificacaoResultado | null>(null);
   const isOnlineRef = useRef(true);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const sessaoAtivaRef = useRef<Sessao | null>(null);
@@ -363,14 +373,20 @@ export default function TreinoScreen() {
       // Se voltou online, tenta sincronizar imediatamente
       if (isOnlineRef.current) sincronizarFila();
     },
-    onSuccess: () => {
+    onSuccess: (response: any) => {
       setSessaoAtiva(null);
       setExercicios([]);
-      queryClient.invalidateQueries({ queryKey: ['treinos-aluno', 'sessao-ativa', 'sessoes-semana'] });
-      const msg = isOnlineRef.current
-        ? 'Ótimo trabalho! Seu progresso foi salvo.'
-        : 'Treino salvo offline. Será sincronizado quando você estiver online.';
-      Alert.alert('🎉 Treino concluído!', msg);
+      queryClient.invalidateQueries({ queryKey: ['treinos-aluno', 'sessao-ativa', 'sessoes-semana', 'meu-perfil'] });
+
+      if (response?.data?.gamificacao) {
+        setGamiResultado(response.data.gamificacao);
+      } else {
+        // Offline ou sem dados de gamificação
+        const msg = isOnlineRef.current
+          ? 'Ótimo trabalho! Seu progresso foi salvo.'
+          : 'Treino salvo offline. Será sincronizado quando você estiver online.';
+        Alert.alert('🎉 Treino concluído!', msg);
+      }
     },
   });
 
@@ -560,6 +576,66 @@ export default function TreinoScreen() {
         <View className="flex-1 bg-black/80 items-center justify-center px-6">
           <View className="bg-surface border border-border rounded-3xl w-full p-8">
             <TimerDescanso segundos={timerDescanso?.segundos ?? 60} onFim={() => setTimerDescanso(null)} />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal de XP / Gamificação */}
+      <Modal visible={!!gamiResultado} transparent animationType="slide" onRequestClose={() => setGamiResultado(null)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' }}>
+          <View className="bg-surface rounded-t-3xl p-6 pb-10">
+            <View className="items-center mb-5">
+              <Text style={{ fontSize: 56 }}>🎉</Text>
+              <Text className="text-textPrimary text-2xl font-bold mt-2">Treino concluído!</Text>
+              <Text className="text-textSecondary text-sm mt-1">Ótimo trabalho! Continue assim.</Text>
+            </View>
+
+            {/* XP ganho */}
+            <View className="bg-primary/10 border border-primary/30 rounded-2xl p-4 mb-3 items-center">
+              <Text className="text-primary text-4xl font-bold">+{gamiResultado?.xpGanho} XP</Text>
+              <Text className="text-textSecondary text-sm mt-1">
+                Total: {gamiResultado?.xpTotal} XP · Nível {gamiResultado?.nivel}
+              </Text>
+              {gamiResultado?.xpProximoNivel && (
+                <Text className="text-textMuted text-xs mt-1">
+                  {gamiResultado.xpProximoNivel - (gamiResultado.xpTotal ?? 0)} XP para o próximo nível
+                </Text>
+              )}
+            </View>
+
+            {/* Streak */}
+            {(gamiResultado?.streak ?? 0) > 0 && (
+              <View className="bg-surface border border-border rounded-2xl p-3 mb-3 flex-row items-center gap-3">
+                <Text style={{ fontSize: 28 }}>🔥</Text>
+                <View>
+                  <Text className="text-textPrimary font-bold">{gamiResultado?.streak} dias seguidos</Text>
+                  <Text className="text-textMuted text-xs">Continue a sequência amanhã!</Text>
+                </View>
+              </View>
+            )}
+
+            {/* Badges novos */}
+            {(gamiResultado?.badgesNovos?.length ?? 0) > 0 && (
+              <View className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-4 mb-3">
+                <Text className="text-yellow-400 text-xs font-bold uppercase tracking-widest mb-2">Nova conquista!</Text>
+                {gamiResultado!.badgesNovos.map((b) => (
+                  <View key={b.id} className="flex-row items-center gap-3">
+                    <Text style={{ fontSize: 28 }}>{b.icone}</Text>
+                    <View>
+                      <Text className="text-textPrimary font-bold">{b.nome}</Text>
+                      <Text className="text-textMuted text-xs">{b.descricao}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            <TouchableOpacity
+              onPress={() => setGamiResultado(null)}
+              className="bg-primary rounded-2xl py-4 items-center mt-2"
+            >
+              <Text className="text-white font-bold text-base">Fechar</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

@@ -1,6 +1,8 @@
 const TreinoSessao = require('../models/TreinoSessao');
 const Progresso = require('../models/Progresso');
 const Treino = require('../models/Treino');
+const User = require('../models/User');
+const { processarGamificacao } = require('../utils/gamificacao');
 
 // POST /sessoes — aluno inicia uma sessão de treino
 async function iniciar(req, res, next) {
@@ -104,7 +106,23 @@ async function concluir(req, res, next) {
     });
 
     await Promise.all(progressoPromises);
-    res.json(sessao);
+
+    // Gamificação
+    const user = await User.findById(req.user.id);
+    const gami = processarGamificacao(user, sessao);
+
+    user.xp = gami.xp;
+    user.nivel = gami.nivel;
+    user.streak = gami.streak;
+    user.melhorStreak = gami.melhorStreak;
+    user.ultimoTreino = gami.ultimoTreino;
+    user.totalTreinos = gami.totalTreinos;
+    if (gami.badgesNovos.length > 0) {
+      user.badges.push(...gami.badgesNovos);
+    }
+    await user.save();
+
+    res.json({ sessao, gamificacao: gami.resultado });
   } catch (err) {
     next(err);
   }

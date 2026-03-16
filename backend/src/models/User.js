@@ -9,6 +9,14 @@ const PlanoSchema = new Schema({
   dataExpiracao: { type: Date, default: null },
 }, { _id: false });
 
+const BadgeSchema = new Schema({
+  id: { type: String, required: true },
+  nome: { type: String, required: true },
+  descricao: { type: String, default: '' },
+  icone: { type: String, default: '🏅' },
+  conquistadoEm: { type: Date, default: Date.now },
+}, { _id: false });
+
 const LimitesPlano = {
   trial: 1,
   basic: 10,
@@ -42,6 +50,15 @@ const UserSchema = new Schema(
     dataNascimento: { type: Date, default: null },
 
     ativo: { type: Boolean, default: true },
+
+    // Gamificação (apenas para alunos)
+    xp: { type: Number, default: 0 },
+    nivel: { type: Number, default: 1 },
+    streak: { type: Number, default: 0 },
+    melhorStreak: { type: Number, default: 0 },
+    ultimoTreino: { type: Date, default: null },
+    totalTreinos: { type: Number, default: 0 },
+    badges: { type: [BadgeSchema], default: [] },
   },
   { timestamps: true }
 );

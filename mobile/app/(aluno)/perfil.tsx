@@ -12,6 +12,14 @@ import { useAuthStore } from '../../src/store/authStore';
 
 const API_URL = 'http://192.168.1.100:3001';
 
+interface Badge {
+  id: string;
+  nome: string;
+  descricao: string;
+  icone: string;
+  conquistadoEm: string;
+}
+
 interface MeuPerfil {
   _id: string;
   nome: string;
@@ -22,6 +30,21 @@ interface MeuPerfil {
   altura: number | null;
   foto: string | null;
   personalId?: { nome: string; email: string } | null;
+  xp: number;
+  nivel: number;
+  streak: number;
+  melhorStreak: number;
+  totalTreinos: number;
+  badges: Badge[];
+}
+
+const XP_POR_NIVEL = [0, 150, 350, 700, 1200, 2000, 3000, 4500, 6500, 9000];
+
+function xpParaNivel(nivel: number) {
+  return XP_POR_NIVEL[nivel - 1] ?? 0;
+}
+function xpProximoNivel(nivel: number) {
+  return XP_POR_NIVEL[nivel] ?? null;
 }
 
 export default function PerfilAlunoScreen() {
@@ -204,6 +227,74 @@ export default function PerfilAlunoScreen() {
             <Text className="text-textMuted text-xs">IMC</Text>
             <Ionicons name="information-circle-outline" size={14} color="#6C63FF" style={{ marginTop: 4 }} />
           </TouchableOpacity>
+        </View>
+
+        {/* Gamificação */}
+        <View className="mx-5 mb-5">
+          {/* Nível e XP */}
+          <View className="bg-surface border border-border rounded-2xl p-4 mb-3">
+            <View className="flex-row justify-between items-center mb-2">
+              <View className="flex-row items-center gap-2">
+                <View className="bg-primary/20 px-2 py-0.5 rounded-lg">
+                  <Text className="text-primary text-xs font-bold">Nível {perfil?.nivel ?? 1}</Text>
+                </View>
+                <Text className="text-textPrimary font-bold">{perfil?.xp ?? 0} XP</Text>
+              </View>
+              {perfil && xpProximoNivel(perfil.nivel) && (
+                <Text className="text-textMuted text-xs">
+                  {xpProximoNivel(perfil.nivel)! - (perfil.xp ?? 0)} XP para nível {perfil.nivel + 1}
+                </Text>
+              )}
+            </View>
+            {/* Barra de XP */}
+            {perfil && (() => {
+              const xpAtual = perfil.xp ?? 0;
+              const xpInicio = xpParaNivel(perfil.nivel);
+              const xpFim = xpProximoNivel(perfil.nivel);
+              const progresso = xpFim ? Math.min(1, (xpAtual - xpInicio) / (xpFim - xpInicio)) : 1;
+              return (
+                <View className="h-2 bg-surfaceLight rounded-full overflow-hidden">
+                  <View style={{ width: `${Math.round(progresso * 100)}%`, backgroundColor: '#6C63FF' }} className="h-full rounded-full" />
+                </View>
+              );
+            })()}
+
+            {/* Stats rápidos */}
+            <View className="flex-row mt-3 gap-2">
+              <View className="flex-1 items-center">
+                <Text className="text-2xl">🔥</Text>
+                <Text className="text-textPrimary font-bold text-base">{perfil?.streak ?? 0}</Text>
+                <Text className="text-textMuted text-xs">Sequência</Text>
+              </View>
+              <View className="w-px bg-border" />
+              <View className="flex-1 items-center">
+                <Text className="text-2xl">🏋️</Text>
+                <Text className="text-textPrimary font-bold text-base">{perfil?.totalTreinos ?? 0}</Text>
+                <Text className="text-textMuted text-xs">Treinos</Text>
+              </View>
+              <View className="w-px bg-border" />
+              <View className="flex-1 items-center">
+                <Text className="text-2xl">⚡</Text>
+                <Text className="text-textPrimary font-bold text-base">{perfil?.melhorStreak ?? 0}</Text>
+                <Text className="text-textMuted text-xs">Melhor streak</Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Badges */}
+          {(perfil?.badges?.length ?? 0) > 0 && (
+            <View className="bg-surface border border-border rounded-2xl p-4">
+              <Text className="text-textSecondary text-xs font-semibold mb-3 tracking-widest uppercase">Conquistas</Text>
+              <View className="flex-row flex-wrap gap-2">
+                {perfil!.badges.map((badge) => (
+                  <View key={badge.id} className="bg-primary/10 border border-primary/20 rounded-xl px-3 py-2 items-center" style={{ minWidth: 80 }}>
+                    <Text className="text-2xl mb-1">{badge.icone}</Text>
+                    <Text className="text-primary text-xs font-bold text-center">{badge.nome}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Formulário */}
