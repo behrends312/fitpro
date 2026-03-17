@@ -133,7 +133,7 @@ async function musculosTreinados(req, res, next) {
     }).populate('exercicio', 'musculosPrincipais');
 
     // Agrega volume total por grupo muscular
-    const volumePorMusculo: Record<string, number> = {};
+    const volumePorMusculo = {};
     for (const r of registros) {
       const musculos = r.exercicio?.musculosPrincipais || [];
       for (const m of musculos) {
