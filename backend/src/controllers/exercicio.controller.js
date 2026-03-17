@@ -3,11 +3,18 @@ const Exercicio = require('../models/Exercicio');
 // GET /exercicios — lista exercícios disponíveis para o personal (seus + públicos)
 async function listar(req, res, next) {
   try {
-    const { busca, musculo, equipamento, dificuldade } = req.query;
-    const query = {
-      ativo: true,
-      $or: [{ criadoPor: req.user.id }, { publica: true }],
-    };
+    const { busca, musculo, equipamento, dificuldade, scope } = req.query;
+
+    let baseQuery;
+    if (scope === 'minha') {
+      baseQuery = { ativo: true, criadoPor: req.user.id };
+    } else if (scope === 'predefinidos') {
+      baseQuery = { ativo: true, publica: true };
+    } else {
+      baseQuery = { ativo: true, $or: [{ criadoPor: req.user.id }, { publica: true }] };
+    }
+
+    const query = { ...baseQuery };
 
     if (busca) query.nome = { $regex: busca, $options: 'i' };
     if (musculo) query.musculosPrincipais = musculo;

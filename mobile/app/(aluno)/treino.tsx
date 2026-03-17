@@ -21,6 +21,9 @@ interface SerieExec {
 interface ExercicioExec {
   exercicio: { _id: string; nome: string; musculosPrincipais: string[]; videoUrl?: string };
   series: SerieExec[];
+  grupoTipo?: string;
+  grupoId?: string | null;
+  grupoOrdem?: number;
 }
 interface Sessao {
   _id: string;
@@ -49,6 +52,11 @@ const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 function CalendarioSemana() {
   const hoje = new Date();
   const diaSemana = hoje.getDay();
+  const [modalCalendario, setModalCalendario] = useState(false);
+  const [diaDetalheSessoes, setDiaDetalheSessoes] = useState<any[] | null>(null);
+  const [mesSel, setMesSel] = useState(() => {
+    const d = new Date(); d.setDate(1); return d;
+  });
 
   const diasSemana = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(hoje);
@@ -58,53 +66,187 @@ function CalendarioSemana() {
 
   const { data: historicoData } = useQuery({
     queryKey: ['sessoes-semana'],
-    queryFn: () => api.get('/sessoes/historico', { params: { limit: 20 } }).then((r) => r.data),
+    queryFn: () => api.get('/sessoes/historico', { params: { limit: 60 } }).then((r) => r.data),
     retry: 0,
   });
 
-  const diasComTreino = new Set<string>();
+  // Mapa: "YYYY-M-D" -> sessoes[]
+  const diasParaSessoes = new Map<string, any[]>();
   if (historicoData?.sessoes) {
     for (const s of historicoData.sessoes) {
       if (s.dataFim) {
         const d = new Date(s.dataFim);
-        diasComTreino.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
+        const k = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+        if (!diasParaSessoes.has(k)) diasParaSessoes.set(k, []);
+        diasParaSessoes.get(k)!.push(s);
       }
     }
   }
 
-  return (
-    <View className="mx-5 mb-5 bg-surface border border-border rounded-2xl p-4">
-      <Text className="text-textSecondary text-xs font-semibold uppercase tracking-widest mb-3">Semana atual</Text>
-      <View className="flex-row justify-between">
-        {diasSemana.map((d, i) => {
-          const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-          const ehHoje = i === diaSemana;
-          const temTreino = diasComTreino.has(key);
-          const ehFuturo = d > hoje && !ehHoje;
+  // Calendário mensal
+  const diasNoMes = new Date(mesSel.getFullYear(), mesSel.getMonth() + 1, 0).getDate();
+  const primeiroDiaSemana = new Date(mesSel.getFullYear(), mesSel.getMonth(), 1).getDay();
+  const celulas = Array.from({ length: primeiroDiaSemana + diasNoMes }, (_, i) =>
+    i < primeiroDiaSemana ? null : new Date(mesSel.getFullYear(), mesSel.getMonth(), i - primeiroDiaSemana + 1)
+  );
+  // Completa até múltiplo de 7
+  while (celulas.length % 7 !== 0) celulas.push(null);
 
-          return (
-            <View key={i} className="items-center flex-1">
-              <Text className={`text-xs mb-2 ${ehHoje ? 'text-primary font-bold' : 'text-textMuted'}`}>
-                {DIAS_SEMANA[i]}
-              </Text>
-              <View
-                className={`w-8 h-8 rounded-full items-center justify-center ${
-                  temTreino ? 'bg-success' : ehHoje ? 'border-2 border-primary' : 'bg-background'
-                }`}
+  return (
+    <>
+      <View className="mx-5 mb-5 bg-surface border border-border rounded-2xl p-4">
+        <View className="flex-row justify-between items-center mb-3">
+          <Text className="text-textSecondary text-xs font-semibold uppercase tracking-widest">Semana atual</Text>
+          <TouchableOpacity onPress={() => setModalCalendario(true)} className="flex-row items-center gap-1">
+            <Ionicons name="calendar-outline" size={14} color="#6C63FF" />
+            <Text className="text-primary text-xs font-semibold">Ver calendário</Text>
+          </TouchableOpacity>
+        </View>
+        <View className="flex-row justify-between">
+          {diasSemana.map((d, i) => {
+            const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+            const ehHoje = i === diaSemana;
+            const sessoesDia = diasParaSessoes.get(key) || [];
+            const temTreino = sessoesDia.length > 0;
+            const ehFuturo = d > hoje && !ehHoje;
+
+            return (
+              <TouchableOpacity
+                key={i}
+                className="items-center flex-1"
+                onPress={() => {
+                  if (temTreino) setDiaDetalheSessoes(sessoesDia);
+                }}
+                disabled={!temTreino}
               >
-                {temTreino ? (
-                  <Ionicons name="checkmark" size={16} color="white" />
-                ) : (
-                  <Text className={`text-xs font-semibold ${ehHoje ? 'text-primary' : ehFuturo ? 'text-textMuted opacity-40' : 'text-textMuted'}`}>
-                    {d.getDate()}
-                  </Text>
-                )}
-              </View>
-            </View>
-          );
-        })}
+                <Text className={`text-xs mb-2 ${ehHoje ? 'text-primary font-bold' : 'text-textMuted'}`}>
+                  {DIAS_SEMANA[i]}
+                </Text>
+                <View
+                  className={`w-8 h-8 rounded-full items-center justify-center ${
+                    temTreino ? 'bg-success' : ehHoje ? 'border-2 border-primary' : 'bg-background'
+                  }`}
+                >
+                  {temTreino ? (
+                    <Ionicons name="checkmark" size={16} color="white" />
+                  ) : (
+                    <Text className={`text-xs font-semibold ${ehHoje ? 'text-primary' : ehFuturo ? 'text-textMuted opacity-40' : 'text-textMuted'}`}>
+                      {d.getDate()}
+                    </Text>
+                  )}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
       </View>
-    </View>
+
+      {/* Modal detalhe de sessões do dia */}
+      <Modal visible={!!diaDetalheSessoes} transparent animationType="fade" onRequestClose={() => setDiaDetalheSessoes(null)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: 24 }}>
+          <View className="bg-surface rounded-3xl p-6">
+            <View className="flex-row justify-between items-center mb-4">
+              <Text className="text-textPrimary text-lg font-bold">Treinos do dia</Text>
+              <TouchableOpacity onPress={() => setDiaDetalheSessoes(null)}>
+                <Ionicons name="close" size={24} color="#9090a8" />
+              </TouchableOpacity>
+            </View>
+            {diaDetalheSessoes?.map((s: any, i: number) => (
+              <View key={i} className="bg-background border border-border rounded-xl p-3 mb-2">
+                <View className="bg-primary/20 px-2 py-0.5 rounded-md self-start mb-1">
+                  <Text className="text-primary text-xs font-bold">Treino {s.treino?.tipo}</Text>
+                </View>
+                <Text className="text-textPrimary font-semibold">{s.treino?.nome}</Text>
+                <Text className="text-textMuted text-xs mt-1">
+                  {new Date(s.dataFim).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  {s.duracaoSegundos ? ` · ${Math.floor(s.duracaoSegundos / 60)}min` : ''}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal calendário mensal */}
+      <Modal visible={modalCalendario} transparent animationType="slide" onRequestClose={() => setModalCalendario(false)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' }}>
+          <View className="bg-surface rounded-t-3xl p-6" style={{ maxHeight: '80%' }}>
+            <View className="flex-row justify-between items-center mb-5">
+              <Text className="text-textPrimary text-lg font-bold">Histórico de treinos</Text>
+              <TouchableOpacity onPress={() => setModalCalendario(false)}>
+                <Ionicons name="close" size={24} color="#9090a8" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Navegação de mês */}
+            <View className="flex-row items-center justify-between mb-4">
+              <TouchableOpacity
+                onPress={() => setMesSel((m) => { const d = new Date(m); d.setMonth(d.getMonth() - 1); return d; })}
+                className="w-9 h-9 bg-surfaceLight rounded-xl items-center justify-center"
+              >
+                <Ionicons name="chevron-back" size={18} color="#9090a8" />
+              </TouchableOpacity>
+              <Text className="text-textPrimary font-bold">
+                {mesSel.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setMesSel((m) => { const d = new Date(m); d.setMonth(d.getMonth() + 1); return d; })}
+                disabled={mesSel.getMonth() === hoje.getMonth() && mesSel.getFullYear() === hoje.getFullYear()}
+                className="w-9 h-9 bg-surfaceLight rounded-xl items-center justify-center"
+              >
+                <Ionicons name="chevron-forward" size={18} color="#9090a8" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Header dias */}
+            <View className="flex-row mb-2">
+              {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => (
+                <Text key={i} className="flex-1 text-center text-textMuted text-xs font-semibold">{d}</Text>
+              ))}
+            </View>
+
+            {/* Grade do calendário */}
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {Array.from({ length: celulas.length / 7 }, (_, semana) => (
+                <View key={semana} className="flex-row mb-2">
+                  {celulas.slice(semana * 7, semana * 7 + 7).map((dia, i) => {
+                    if (!dia) return <View key={i} className="flex-1" />;
+                    const k = `${dia.getFullYear()}-${dia.getMonth()}-${dia.getDate()}`;
+                    const sessoes = diasParaSessoes.get(k) || [];
+                    const temTreino = sessoes.length > 0;
+                    const ehHojeLocal = dia.toDateString() === hoje.toDateString();
+
+                    return (
+                      <TouchableOpacity
+                        key={i}
+                        onPress={() => { if (temTreino) { setDiaDetalheSessoes(sessoes); setModalCalendario(false); } }}
+                        disabled={!temTreino}
+                        className="flex-1 items-center"
+                      >
+                        <View className={`w-8 h-8 rounded-full items-center justify-center ${
+                          temTreino ? 'bg-success' : ehHojeLocal ? 'border-2 border-primary' : ''
+                        }`}>
+                          <Text className={`text-xs font-semibold ${
+                            temTreino ? 'text-white' : ehHojeLocal ? 'text-primary' : 'text-textMuted'
+                          }`}>
+                            {dia.getDate()}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ))}
+              <View className="flex-row items-center gap-3 mt-4 pt-4 border-t border-border">
+                <View className="w-4 h-4 rounded-full bg-success" />
+                <Text className="text-textMuted text-xs">Dia com treino (toque para ver)</Text>
+              </View>
+              <View className="h-4" />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -665,14 +807,35 @@ export default function TreinoScreen() {
           const completo = feitos === total;
           const colapsado = colapsados.has(eIdx);
 
+          const GRUPO_CORES: Record<string, string> = {
+            'bi-set': '#6C63FF',
+            'tri-set': '#f59e0b',
+            'super-set': '#10b981',
+            'drop-set': '#ef4444',
+            'giant-set': '#8b5cf6',
+          };
+          const grupoTipo = ex.grupoTipo && ex.grupoTipo !== 'none' ? ex.grupoTipo : null;
+          const grupoCor = grupoTipo ? GRUPO_CORES[grupoTipo] || '#6C63FF' : null;
+
           return (
-            <View key={eIdx} className={`mb-3 rounded-2xl border overflow-hidden ${completo ? 'border-success/30 bg-success/5' : 'border-border bg-surface'}`}>
+            <View
+              key={eIdx}
+              style={grupoCor ? { borderLeftWidth: 3, borderLeftColor: grupoCor } : {}}
+              className={`mb-3 rounded-2xl border overflow-hidden ${completo ? 'border-success/30 bg-success/5' : 'border-border bg-surface'}`}
+            >
               <TouchableOpacity
                 onPress={() => toggleColapso(eIdx)}
                 className="flex-row justify-between items-center p-4"
                 activeOpacity={0.7}
               >
                 <View className="flex-1">
+                  {grupoTipo && (
+                    <View style={{ backgroundColor: grupoCor + '20' }} className="self-start px-2 py-0.5 rounded-md mb-1">
+                      <Text style={{ color: grupoCor }} className="text-xs font-bold uppercase">
+                        {grupoTipo} · Ex {(ex.grupoOrdem ?? 0) + 1}
+                      </Text>
+                    </View>
+                  )}
                   <Text className="text-textPrimary font-bold text-base">{ex.exercicio.nome}</Text>
                   {ex.exercicio.musculosPrincipais?.length > 0 && (
                     <Text className="text-textMuted text-xs mt-0.5">{ex.exercicio.musculosPrincipais.join(' · ')}</Text>

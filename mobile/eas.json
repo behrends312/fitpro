@@ -11,6 +11,23 @@
       "ios": {
         "simulator": false
       }
+    },
+    "production": {
+      "distribution": "store",
+      "ios": {
+        "credentialsSource": "remote"
+      },
+      "android": {
+        "buildType": "app-bundle",
+        "credentialsSource": "remote"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "carlosandrebehrends@yahoo.com.br"
+      }
     }
   }
 }

@@ -72,11 +72,9 @@ export default function PerfilAlunoScreen() {
     }
   }, [perfil]);
 
-  const atualizarMutation = useMutation({
-    mutationFn: async (formData: FormData) => {
-      return api.patch('/users/me', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+  const atualizarTextMutation = useMutation({
+    mutationFn: async (body: Record<string, any>) => {
+      return api.patch('/users/me', body);
     },
     onSuccess: ({ data }) => {
       updateUser({ nome: data.nome, foto: data.foto });
@@ -87,14 +85,24 @@ export default function PerfilAlunoScreen() {
     onError: () => Alert.alert('Erro', 'Não foi possível atualizar o perfil.'),
   });
 
+  const atualizarFotoMutation = useMutation({
+    mutationFn: async (formData: FormData) => {
+      return api.patch('/users/me', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    },
+    onSuccess: ({ data }) => {
+      updateUser({ nome: data.nome, foto: data.foto });
+      refetch();
+    },
+    onError: () => Alert.alert('Erro', 'Não foi possível atualizar a foto.'),
+  });
+
   async function handleSalvar() {
-    const formData = new FormData() as any;
-    formData.append('nome', nome);
-    formData.append('telefone', telefone);
-    formData.append('objetivo', objetivo);
-    if (peso) formData.append('peso', peso);
-    if (altura) formData.append('altura', altura);
-    atualizarMutation.mutate(formData);
+    const body: Record<string, any> = { nome, telefone, objetivo };
+    if (peso) body.peso = Number(peso);
+    if (altura) body.altura = Number(altura);
+    atualizarTextMutation.mutate(body);
   }
 
   async function handleFoto() {
@@ -108,7 +116,7 @@ export default function PerfilAlunoScreen() {
       const file = result.assets[0];
       const formData = new FormData() as any;
       formData.append('foto', { uri: file.uri, type: 'image/jpeg', name: 'foto.jpg' });
-      atualizarMutation.mutate(formData);
+      atualizarFotoMutation.mutate(formData);
     }
   }
 
@@ -303,10 +311,10 @@ export default function PerfilAlunoScreen() {
             <Text className="text-textPrimary font-bold text-base">Meus dados</Text>
             <TouchableOpacity
               onPress={() => (editando ? handleSalvar() : setEditando(true))}
-              disabled={atualizarMutation.isPending}
+              disabled={atualizarTextMutation.isPending}
               className={`px-4 py-2 rounded-lg ${editando ? 'bg-primary' : 'bg-surfaceLight'}`}
             >
-              {atualizarMutation.isPending ? (
+              {atualizarTextMutation.isPending ? (
                 <ActivityIndicator color="white" size="small" />
               ) : (
                 <Text className={`text-sm font-semibold ${editando ? 'text-white' : 'text-textSecondary'}`}>

@@ -186,7 +186,7 @@ export default function ExerciciosScreen() {
   const { data: exercicios = [], isLoading } = useQuery<Exercicio[]>({
     queryKey: ['exercicios', busca],
     queryFn: () => {
-      const params: Record<string, string> = {};
+      const params: Record<string, string> = { scope: 'minha' };
       if (busca) params.busca = busca;
       return api.get('/exercicios', { params }).then((r) => r.data);
     },

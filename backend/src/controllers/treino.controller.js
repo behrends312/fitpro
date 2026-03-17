@@ -6,7 +6,7 @@ async function listar(req, res, next) {
   try {
     const query =
       req.user.role === 'personal'
-        ? { personal: req.user.id, ativo: true }
+        ? { personal: req.user.id, ativo: true, isTemplate: { $ne: true } }
         : { aluno: req.user.id, ativo: true };
 
     const treinos = await Treino.find(query)

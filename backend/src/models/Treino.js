@@ -9,6 +9,15 @@ const ExercicioTreinoSchema = new Schema(
     carga: { type: Number, default: 0 },   // kg
     descanso: { type: Number, default: 60 }, // segundos
     observacoes: { type: String, default: '' },
+
+    // Agrupamento: bi-set, tri-set, drop-set, super-set
+    grupoTipo: {
+      type: String,
+      enum: ['none', 'bi-set', 'tri-set', 'super-set', 'drop-set', 'giant-set'],
+      default: 'none',
+    },
+    grupoId: { type: String, default: null }, // UUID compartilhado entre exercícios do mesmo grupo
+    grupoOrdem: { type: Number, default: 0 }, // posição dentro do grupo (0, 1, 2...)
   },
   { _id: true }
 );
@@ -20,8 +29,13 @@ const TreinoSchema = new Schema(
     tipo: { type: String, default: 'A' }, // A, B, C ou nome livre
 
     // Relacionamentos
-    aluno: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    // aluno é null quando o treino é template de um plano
+    aluno: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     personal: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+
+    // Se pertence a um plano (template)
+    plano: { type: Schema.Types.ObjectId, ref: 'PlanoTreino', default: null },
+    isTemplate: { type: Boolean, default: false },
 
     // Exercícios do treino
     exercicios: [ExercicioTreinoSchema],

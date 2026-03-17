@@ -62,6 +62,12 @@ export default function PersonalLayout() {
         }}
       />
       <Tabs.Screen
+        name="planos"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="assinatura"
         options={{
           href: null,

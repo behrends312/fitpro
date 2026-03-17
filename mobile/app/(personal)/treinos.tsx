@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useRouter } from 'expo-router';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput, Modal,
   Alert, ActivityIndicator, FlatList, KeyboardAvoidingView, Platform,
@@ -16,12 +17,16 @@ interface ExercicioDisponivel {
   equipamento: string;
 }
 interface Aluno { _id: string; nome: string; email: string }
+type GrupoTipo = 'none' | 'bi-set' | 'tri-set' | 'super-set' | 'drop-set';
 interface TreinoExercicio {
   exercicio: ExercicioDisponivel;
   series: number;
   reps: string;
   carga: number;
   descanso: number;
+  grupoTipo: GrupoTipo;
+  grupoId: string | null;
+  grupoOrdem: number;
 }
 interface Treino {
   _id: string;
@@ -112,6 +117,9 @@ function ModalTreino({
         reps: e.reps,
         carga: e.carga,
         descanso: e.descanso,
+        grupoTipo: e.grupoTipo || 'none',
+        grupoId: e.grupoId || null,
+        grupoOrdem: e.grupoOrdem || 0,
       })),
     }),
     onSuccess: () => {
@@ -132,6 +140,9 @@ function ModalTreino({
         reps: e.reps,
         carga: e.carga,
         descanso: e.descanso,
+        grupoTipo: e.grupoTipo || 'none',
+        grupoId: e.grupoId || null,
+        grupoOrdem: e.grupoOrdem || 0,
       })),
     }),
     onSuccess: () => {
@@ -155,8 +166,34 @@ function ModalTreino({
     if (idx >= 0) {
       setExerciciosSel((prev) => prev.filter((_, i) => i !== idx));
     } else {
-      setExerciciosSel((prev) => [...prev, { exercicio: ex, series: 3, reps: '10', carga: 0, descanso: 60 }]);
+      setExerciciosSel((prev) => [
+        ...prev,
+        { exercicio: ex, series: 3, reps: '10', carga: 0, descanso: 60, grupoTipo: 'none', grupoId: null, grupoOrdem: 0 },
+      ]);
     }
+  }
+
+  function definirGrupo(exId: string, tipo: GrupoTipo) {
+    setExerciciosSel((prev) => {
+      const idx = prev.findIndex((e) => e.exercicio._id === exId);
+      if (idx < 0) return prev;
+      const lista = [...prev];
+      if (tipo === 'none') {
+        // Remove do grupo
+        lista[idx] = { ...lista[idx], grupoTipo: 'none', grupoId: null, grupoOrdem: 0 };
+      } else {
+        // Agrupa este com o próximo exercício
+        const grupoId = `grupo_${Date.now()}_${idx}`;
+        lista[idx] = { ...lista[idx], grupoTipo: tipo, grupoId, grupoOrdem: 0 };
+        if (idx + 1 < lista.length) {
+          lista[idx + 1] = { ...lista[idx + 1], grupoTipo: tipo, grupoId, grupoOrdem: 1 };
+          if (tipo === 'tri-set' && idx + 2 < lista.length) {
+            lista[idx + 2] = { ...lista[idx + 2], grupoTipo: tipo, grupoId, grupoOrdem: 2 };
+          }
+        }
+      }
+      return lista;
+    });
   }
 
   function atualizarConfig(exId: string, campo: string, valor: any) {
@@ -278,34 +315,78 @@ function ModalTreino({
                   {exerciciosSel.length > 0 && (
                     <View className="mb-5">
                       <Text className="text-textSecondary text-xs font-semibold mb-2 uppercase tracking-widest">Selecionados ({exerciciosSel.length})</Text>
-                      {exerciciosSel.map((e) => (
-                        <View key={e.exercicio._id} className="bg-primary/5 border border-primary/20 rounded-xl p-3 mb-2">
-                          <View className="flex-row justify-between items-center mb-2">
-                            <Text className="text-textPrimary font-semibold flex-1">{e.exercicio.nome}</Text>
-                            <TouchableOpacity onPress={() => toggleExercicio(e.exercicio)}>
-                              <Ionicons name="close-circle" size={20} color="#f87171" />
-                            </TouchableOpacity>
-                          </View>
-                          <View className="flex-row gap-2">
-                            {[
-                              { label: 'Séries', campo: 'series', valor: String(e.series), kb: 'numeric' as const },
-                              { label: 'Reps', campo: 'reps', valor: e.reps, kb: 'default' as const },
-                              { label: 'Kg', campo: 'carga', valor: String(e.carga), kb: 'numeric' as const },
-                              { label: 'Desc(s)', campo: 'descanso', valor: String(e.descanso), kb: 'numeric' as const },
-                            ].map((c) => (
-                              <View key={c.campo} className="flex-1">
-                                <Text className="text-textMuted text-xs mb-1">{c.label}</Text>
-                                <TextInput
-                                  className="bg-background border border-border rounded-lg px-2 py-1.5 text-textPrimary text-sm text-center"
-                                  value={c.valor}
-                                  onChangeText={(v) => atualizarConfig(e.exercicio._id, c.campo, c.kb === 'numeric' ? Number(v) || 0 : v)}
-                                  keyboardType={c.kb}
-                                />
+                      {exerciciosSel.map((e, eIdx) => {
+                        const GRUPO_COR: Record<GrupoTipo, string> = {
+                          'none': 'transparent',
+                          'bi-set': '#6C63FF',
+                          'tri-set': '#f59e0b',
+                          'super-set': '#10b981',
+                          'drop-set': '#ef4444',
+                        };
+                        const temGrupo = e.grupoTipo !== 'none';
+                        return (
+                          <View
+                            key={e.exercicio._id}
+                            style={temGrupo ? { borderLeftWidth: 3, borderLeftColor: GRUPO_COR[e.grupoTipo], borderRadius: 12 } : {}}
+                            className={`bg-primary/5 border border-primary/20 rounded-xl p-3 mb-2`}
+                          >
+                            <View className="flex-row justify-between items-center mb-2">
+                              <View className="flex-1 mr-2">
+                                {temGrupo && (
+                                  <View style={{ backgroundColor: GRUPO_COR[e.grupoTipo] + '25' }} className="self-start px-2 py-0.5 rounded-md mb-1">
+                                    <Text style={{ color: GRUPO_COR[e.grupoTipo] }} className="text-xs font-bold uppercase">
+                                      {e.grupoTipo} {e.grupoOrdem + 1}
+                                    </Text>
+                                  </View>
+                                )}
+                                <Text className="text-textPrimary font-semibold">{e.exercicio.nome}</Text>
                               </View>
-                            ))}
+                              <TouchableOpacity onPress={() => toggleExercicio(e.exercicio)}>
+                                <Ionicons name="close-circle" size={20} color="#f87171" />
+                              </TouchableOpacity>
+                            </View>
+                            <View className="flex-row gap-2 mb-2">
+                              {[
+                                { label: 'Séries', campo: 'series', valor: String(e.series), kb: 'numeric' as const },
+                                { label: 'Reps', campo: 'reps', valor: e.reps, kb: 'default' as const },
+                                { label: 'Kg', campo: 'carga', valor: String(e.carga), kb: 'numeric' as const },
+                                { label: 'Desc(s)', campo: 'descanso', valor: String(e.descanso), kb: 'numeric' as const },
+                              ].map((c) => (
+                                <View key={c.campo} className="flex-1">
+                                  <Text className="text-textMuted text-xs mb-1">{c.label}</Text>
+                                  <TextInput
+                                    className="bg-background border border-border rounded-lg px-2 py-1.5 text-textPrimary text-sm text-center"
+                                    value={c.valor}
+                                    onChangeText={(v) => atualizarConfig(e.exercicio._id, c.campo, c.kb === 'numeric' ? Number(v) || 0 : v)}
+                                    keyboardType={c.kb}
+                                  />
+                                </View>
+                              ))}
+                            </View>
+                            {/* Agrupar com próximo */}
+                            {eIdx < exerciciosSel.length - 1 && (
+                              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                <View className="flex-row gap-1.5">
+                                  {(['none', 'bi-set', 'tri-set', 'super-set', 'drop-set'] as GrupoTipo[]).map((tipo) => (
+                                    <TouchableOpacity
+                                      key={tipo}
+                                      onPress={() => definirGrupo(e.exercicio._id, tipo)}
+                                      style={e.grupoTipo === tipo && tipo !== 'none'
+                                        ? { backgroundColor: GRUPO_COR[tipo] + '30', borderColor: GRUPO_COR[tipo], borderWidth: 1 }
+                                        : {}}
+                                      className={`px-2 py-1 rounded-lg border border-border ${e.grupoTipo === tipo && tipo !== 'none' ? '' : 'bg-background'}`}
+                                    >
+                                      <Text style={e.grupoTipo === tipo && tipo !== 'none' ? { color: GRUPO_COR[tipo] } : {}} className={`text-xs font-semibold ${e.grupoTipo === tipo && tipo !== 'none' ? '' : 'text-textMuted'}`}>
+                                        {tipo === 'none' ? 'Sem grupo' : tipo}
+                                      </Text>
+                                    </TouchableOpacity>
+                                  ))}
+                                </View>
+                              </ScrollView>
+                            )}
                           </View>
-                        </View>
-                      ))}
+                        );
+                      })}
                     </View>
                   )}
 
@@ -404,6 +485,7 @@ function ModalTreino({
 }
 
 export default function TreinosScreen() {
+  const router = useRouter();
   const [modalAberto, setModalAberto] = useState(false);
   const [treinoEdit, setTreinoEdit] = useState<Treino | null>(null);
   const queryClient = useQueryClient();
@@ -430,74 +512,106 @@ export default function TreinosScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <View className="px-5 pt-4 pb-4 flex-row justify-between items-center">
-        <View>
-          <Text className="text-textPrimary text-2xl font-bold">Treinos</Text>
-          <Text className="text-textSecondary text-sm">{treinos.length} treino(s)</Text>
+      <View className="px-5 pt-4 pb-2">
+        <View className="flex-row justify-between items-center mb-3">
+          <View>
+            <Text className="text-textPrimary text-2xl font-bold">Treinos</Text>
+            <Text className="text-textSecondary text-sm">{treinos.length} treino(s)</Text>
+          </View>
+          <TouchableOpacity onPress={abrirNovo} className="bg-primary w-12 h-12 rounded-2xl items-center justify-center">
+            <Ionicons name="add" size={26} color="white" />
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity onPress={abrirNovo} className="bg-primary w-12 h-12 rounded-2xl items-center justify-center">
-          <Ionicons name="add" size={26} color="white" />
+        {/* Acesso a Planos */}
+        <TouchableOpacity
+          onPress={() => router.push('/(personal)/planos')}
+          className="flex-row items-center gap-2 bg-primary/10 border border-primary/30 rounded-xl px-4 py-3 mb-3"
+        >
+          <Ionicons name="layers-outline" size={18} color="#6C63FF" />
+          <View className="flex-1">
+            <Text className="text-primary font-semibold text-sm">Planos de Treino</Text>
+            <Text className="text-textMuted text-xs">Crie e atribua planos A+B+C completos</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color="#6C63FF" />
         </TouchableOpacity>
       </View>
 
       {isLoading ? (
         <ActivityIndicator color="#6C63FF" style={{ marginTop: 40 }} />
+      ) : treinos.length === 0 ? (
+        <View className="flex-1 items-center justify-center px-8">
+          <Ionicons name="clipboard-outline" size={56} color="#2e2e40" />
+          <Text className="text-textSecondary text-center mt-4">Crie o primeiro treino dos seus alunos!</Text>
+        </View>
       ) : (
-        <FlatList
-          data={treinos}
-          keyExtractor={(t) => t._id}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }}
-          ListEmptyComponent={
-            <View className="items-center py-16">
-              <Ionicons name="clipboard-outline" size={56} color="#2e2e40" />
-              <Text className="text-textSecondary text-center mt-4">Crie o primeiro treino dos seus alunos!</Text>
-            </View>
-          }
-          renderItem={({ item: treino }) => (
-            <TouchableOpacity
-              className="bg-surface border border-border rounded-2xl p-4 mb-3"
-              onPress={() => abrirEdit(treino)}
-              onLongPress={() =>
-                Alert.alert('Remover treino?', treino.nome, [
-                  { text: 'Cancelar', style: 'cancel' },
-                  { text: 'Remover', style: 'destructive', onPress: () => deletarMutation.mutate(treino._id) },
-                ])
-              }
-            >
-              <View className="flex-row items-start justify-between mb-2">
-                <View className="flex-1">
-                  <View className="flex-row items-center gap-2 mb-1">
-                    <View className="bg-primary/20 px-2 py-0.5 rounded-md">
-                      <Text className="text-primary text-xs font-bold">Treino {treino.tipo}</Text>
+        <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}>
+          {/* Agrupa treinos por aluno */}
+          {(() => {
+            const grupos: Record<string, { aluno: Treino['aluno']; treinos: Treino[] }> = {};
+            for (const t of treinos) {
+              const id = t.aluno?._id || 'sem-aluno';
+              if (!grupos[id]) grupos[id] = { aluno: t.aluno, treinos: [] };
+              grupos[id].treinos.push(t);
+            }
+            return Object.entries(grupos).map(([alunoId, grupo]) => (
+              <View key={alunoId} className="mb-5">
+                {/* Header do aluno */}
+                <View className="flex-row items-center gap-2 mb-3">
+                  <View className="w-7 h-7 rounded-full bg-primary/20 items-center justify-center">
+                    <Text className="text-primary text-xs font-bold">
+                      {(grupo.aluno?.nome || grupo.aluno?.email || '?')[0].toUpperCase()}
+                    </Text>
+                  </View>
+                  <Text className="text-textSecondary text-sm font-semibold">
+                    {grupo.aluno?.nome || grupo.aluno?.email || 'Sem aluno'}
+                  </Text>
+                  <View className="flex-1 h-px bg-border ml-2" />
+                  <Text className="text-textMuted text-xs">{grupo.treinos.length} treino(s)</Text>
+                </View>
+
+                {grupo.treinos.map((treino) => (
+                  <TouchableOpacity
+                    key={treino._id}
+                    className="bg-surface border border-border rounded-2xl p-4 mb-2"
+                    onPress={() => abrirEdit(treino)}
+                    onLongPress={() =>
+                      Alert.alert('Remover treino?', treino.nome, [
+                        { text: 'Cancelar', style: 'cancel' },
+                        { text: 'Remover', style: 'destructive', onPress: () => deletarMutation.mutate(treino._id) },
+                      ])
+                    }
+                  >
+                    <View className="flex-row items-start justify-between mb-2">
+                      <View className="flex-1">
+                        <View className="flex-row items-center gap-2 mb-1">
+                          <View className="bg-primary/20 px-2 py-0.5 rounded-md">
+                            <Text className="text-primary text-xs font-bold">Treino {treino.tipo}</Text>
+                          </View>
+                        </View>
+                        <Text className="text-textPrimary font-bold text-base">{treino.nome}</Text>
+                      </View>
+                      <View className="bg-surface border border-border rounded-lg p-1.5">
+                        <Ionicons name="create-outline" size={16} color="#6C63FF" />
+                      </View>
                     </View>
-                  </View>
-                  <Text className="text-textPrimary font-bold text-base">{treino.nome}</Text>
-                </View>
-                <View className="bg-surface border border-border rounded-lg p-1.5">
-                  <Ionicons name="create-outline" size={16} color="#6C63FF" />
-                </View>
+                    <View className="flex-row gap-4 pt-2 border-t border-border">
+                      <View className="flex-row items-center gap-1">
+                        <Ionicons name="list-outline" size={13} color="#9090a8" />
+                        <Text className="text-textMuted text-xs">{treino.exercicios.length} exercícios</Text>
+                      </View>
+                      {treino.diasSemana?.length > 0 && (
+                        <View className="flex-row items-center gap-1">
+                          <Ionicons name="calendar-outline" size={13} color="#9090a8" />
+                          <Text className="text-textMuted text-xs">{treino.diasSemana.join(', ')}</Text>
+                        </View>
+                      )}
+                    </View>
+                  </TouchableOpacity>
+                ))}
               </View>
-
-              <View className="flex-row items-center gap-2 mb-2">
-                <Ionicons name="person-outline" size={13} color="#9090a8" />
-                <Text className="text-textSecondary text-sm">{treino.aluno.nome || treino.aluno.email}</Text>
-              </View>
-
-              <View className="flex-row gap-4 pt-2 border-t border-border">
-                <View className="flex-row items-center gap-1">
-                  <Ionicons name="list-outline" size={13} color="#9090a8" />
-                  <Text className="text-textMuted text-xs">{treino.exercicios.length} exercícios</Text>
-                </View>
-                {treino.diasSemana?.length > 0 && (
-                  <View className="flex-row items-center gap-1">
-                    <Ionicons name="calendar-outline" size={13} color="#9090a8" />
-                    <Text className="text-textMuted text-xs">{treino.diasSemana.join(', ')}</Text>
-                  </View>
-                )}
-              </View>
-            </TouchableOpacity>
-          )}
-        />
+            ));
+          })()}
+        </ScrollView>
       )}
 
       <ModalTreino

@@ -108,4 +108,48 @@ async function historico(req, res, next) {
   }
 }
 
-module.exports = { evolucaoExercicio, resumo, historico };
+// GET /progresso/musculos — volume por grupo muscular (visão diária/semanal/mensal)
+async function musculosTreinados(req, res, next) {
+  try {
+    const alunoId = req.user.role === 'personal' ? req.query.alunoId : req.user.id;
+    const { periodo = 'semana' } = req.query; // dia, semana, mes
+
+    const agora = new Date();
+    let dataInicio;
+    if (periodo === 'dia') {
+      dataInicio = new Date(agora); dataInicio.setHours(0, 0, 0, 0);
+    } else if (periodo === 'mes') {
+      dataInicio = new Date(agora.getFullYear(), agora.getMonth(), 1);
+    } else {
+      // semana — últimos 7 dias
+      dataInicio = new Date(agora);
+      dataInicio.setDate(agora.getDate() - 6);
+      dataInicio.setHours(0, 0, 0, 0);
+    }
+
+    const registros = await Progresso.find({
+      aluno: require('mongoose').Types.ObjectId.createFromHexString(alunoId),
+      data: { $gte: dataInicio },
+    }).populate('exercicio', 'musculosPrincipais');
+
+    // Agrega volume total por grupo muscular
+    const volumePorMusculo: Record<string, number> = {};
+    for (const r of registros) {
+      const musculos = r.exercicio?.musculosPrincipais || [];
+      for (const m of musculos) {
+        volumePorMusculo[m] = (volumePorMusculo[m] || 0) + r.totalSeries;
+      }
+    }
+
+    // Retorna como array ordenado por volume
+    const resultado = Object.entries(volumePorMusculo)
+      .map(([musculo, series]) => ({ musculo, series }))
+      .sort((a, b) => b.series - a.series);
+
+    res.json({ periodo, dataInicio, resultado });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { evolucaoExercicio, resumo, historico, musculosTreinados };

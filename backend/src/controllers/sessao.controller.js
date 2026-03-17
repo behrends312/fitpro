@@ -128,6 +128,19 @@ async function concluir(req, res, next) {
   }
 }
 
+// GET /sessoes/:id — detalhe de uma sessão
+async function detalhe(req, res, next) {
+  try {
+    const sessao = await TreinoSessao.findOne({ _id: req.params.id, aluno: req.user.id })
+      .populate('treino', 'nome tipo')
+      .populate('exerciciosExecutados.exercicio', 'nome musculosPrincipais');
+    if (!sessao) return res.status(404).json({ message: 'Sessão não encontrada.' });
+    res.json(sessao);
+  } catch (err) {
+    next(err);
+  }
+}
+
 // GET /sessoes — histórico de sessões do aluno
 async function historico(req, res, next) {
   try {
@@ -160,4 +173,4 @@ async function sessaoAtiva(req, res, next) {
   }
 }
 
-module.exports = { iniciar, atualizar, concluir, historico, sessaoAtiva };
+module.exports = { iniciar, atualizar, concluir, historico, sessaoAtiva, detalhe };
