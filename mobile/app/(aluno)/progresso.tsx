@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, ActivityIndicator,
   Dimensions, Modal,
@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { LineChart } from 'react-native-gifted-charts';
+import Svg, { Circle, Rect, Ellipse, Path, G } from 'react-native-svg';
 import api from '../../src/services/api';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -32,32 +33,104 @@ interface ResumoData {
 interface MusculoItem { musculo: string; series: number }
 interface MusculosData { periodo: string; resultado: MusculoItem[] }
 
+// ── Corpo muscular 3D ────────────────────────────────────────────────────────
+type MuscleKey =
+  | 'peitoral' | 'ombros' | 'biceps' | 'antebraco'
+  | 'abdomen' | 'obliquos' | 'quadriceps' | 'panturrilhas'
+  | 'trapezio' | 'dorsais' | 'lombar' | 'triceps'
+  | 'gluteos' | 'posteriores';
+
+function normalizarMusculos(nome: string): MuscleKey[] {
+  const n = nome
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+  const mapa: Record<string, MuscleKey[]> = {
+    'peitoral': ['peitoral'], 'peito': ['peitoral'],
+    'costas': ['dorsais', 'trapezio'], 'dorsais': ['dorsais'],
+    'trapezio': ['trapezio'], 'trapezios': ['trapezio'],
+    'ombros': ['ombros'], 'deltoides': ['ombros'], 'deltoide': ['ombros'],
+    'biceps': ['biceps'],
+    'triceps': ['triceps'],
+    'abdomen': ['abdomen'], 'abdominal': ['abdomen'],
+    'abdominais': ['abdomen'], 'core': ['abdomen'],
+    'obliquos': ['obliquos'], 'obliquo': ['obliquos'],
+    'gluteos': ['gluteos'], 'gluteo': ['gluteos'],
+    'quadriceps': ['quadriceps'], 'quadricep': ['quadriceps'],
+    'coxa': ['quadriceps'], 'coxas': ['quadriceps'],
+    'posteriores': ['posteriores'], 'isquiotibiais': ['posteriores'],
+    'panturrilhas': ['panturrilhas'], 'panturrilha': ['panturrilhas'],
+    'gemeos': ['panturrilhas'],
+    'lombar': ['lombar'],
+    'antebraco': ['antebraco'], 'antebracos': ['antebraco'],
+  };
+  return mapa[n] ?? [];
+}
+
+const BODY_BG     = 'rgba(60,60,110,0.25)';
+const BODY_STROKE = 'rgba(110,110,200,0.35)';
+
+function mFill(series: number, max: number) {
+  if (series === 0) return 'rgba(55,55,95,0.45)';
+  const p = series / max;
+  if (p >= 0.7) return '#f87171';
+  if (p >= 0.4) return '#facc15';
+  return '#4ade80';
+}
+function mStroke(series: number, max: number) {
+  if (series === 0) return 'rgba(90,90,150,0.5)';
+  const p = series / max;
+  if (p >= 0.7) return '#fca5a5';
+  if (p >= 0.4) return '#fde047';
+  return '#86efac';
+}
+function mOp(series: number, max: number) {
+  if (series === 0) return 1;
+  return 0.38 + (series / max) * 0.52;
+}
+
 function GraficoMusculos() {
   const [periodo, setPeriodo] = useState<'dia' | 'semana' | 'mes'>('semana');
+  const [vista, setVista] = useState<'frente' | 'costas'>('frente');
 
   const { data, isLoading } = useQuery<MusculosData>({
     queryKey: ['musculos', periodo],
     queryFn: () => api.get('/progresso/musculos', { params: { periodo } }).then((r) => r.data),
   });
 
-  const resultado = data?.resultado || [];
+  const resultado = data?.resultado ?? [];
   const maxSeries = Math.max(...resultado.map((r) => r.series), 1);
 
-  function corIntensidade(series: number) {
-    const pct = series / maxSeries;
-    if (pct >= 0.7) return '#f87171'; // vermelho — muito treinado
-    if (pct >= 0.4) return '#facc15'; // amarelo — moderado
-    return '#4ade80';                 // verde — pouco
-  }
+  const muscMap = useMemo<Record<string, number>>(() => {
+    const m: Record<string, number> = {};
+    for (const item of resultado) {
+      for (const key of normalizarMusculos(item.musculo)) {
+        m[key] = Math.max(m[key] ?? 0, item.series);
+      }
+    }
+    return m;
+  }, [resultado]);
+
+  const f  = (k: string) => mFill(muscMap[k] ?? 0, maxSeries);
+  const st = (k: string) => mStroke(muscMap[k] ?? 0, maxSeries);
+  const op = (k: string) => mOp(muscMap[k] ?? 0, maxSeries);
+  const mp = (k: string) => ({ fill: f(k), stroke: st(k), opacity: op(k), strokeWidth: 0.9 });
+  const bp = { fill: BODY_BG, stroke: BODY_STROKE, strokeWidth: 0.5 };
 
   const periodos: Array<{ key: 'dia' | 'semana' | 'mes'; label: string }> = [
     { key: 'dia', label: 'Hoje' },
     { key: 'semana', label: 'Semana' },
     { key: 'mes', label: 'Mês' },
   ];
+  const vistas: Array<{ key: 'frente' | 'costas'; label: string }> = [
+    { key: 'frente', label: 'Frente' },
+    { key: 'costas', label: 'Costas' },
+  ];
 
   return (
     <View className="mx-5 mt-5 bg-surface border border-border rounded-2xl p-5">
+      {/* Header + filtro período */}
       <View className="flex-row justify-between items-center mb-4">
         <Text className="text-textPrimary font-bold text-base">Músculos treinados</Text>
         <View className="flex-row gap-1">
@@ -78,40 +151,106 @@ function GraficoMusculos() {
       </View>
 
       {isLoading ? (
-        <ActivityIndicator color="#6C63FF" />
-      ) : resultado.length === 0 ? (
-        <View className="items-center py-8">
-          <Ionicons name="body-outline" size={40} color="#2e2e40" />
-          <Text className="text-textMuted text-sm mt-2 text-center">
-            Nenhum treino registrado{periodo === 'dia' ? ' hoje' : periodo === 'semana' ? ' esta semana' : ' este mês'}.
-          </Text>
+        <View className="h-56 items-center justify-center">
+          <ActivityIndicator color="#6C63FF" />
         </View>
       ) : (
         <>
-          {resultado.map((item) => {
-            const pct = item.series / maxSeries;
-            const cor = corIntensidade(item.series);
-            return (
-              <View key={item.musculo} className="mb-3">
-                <View className="flex-row justify-between mb-1">
-                  <Text className="text-textSecondary text-sm">{item.musculo}</Text>
-                  <Text className="text-textMuted text-xs">{item.series} série(s)</Text>
-                </View>
-                <View className="h-3 bg-surfaceLight rounded-full overflow-hidden">
-                  <View
-                    style={{ width: `${Math.round(pct * 100)}%`, backgroundColor: cor }}
-                    className="h-full rounded-full"
-                  />
-                </View>
-              </View>
-            );
-          })}
+          {/* Toggle frente / costas */}
+          <View className="flex-row gap-2 justify-center mb-5">
+            {vistas.map((v) => (
+              <TouchableOpacity
+                key={v.key}
+                onPress={() => setVista(v.key)}
+                className={`px-6 py-2 rounded-xl border ${
+                  vista === v.key ? 'bg-primary border-primary' : 'bg-background border-border'
+                }`}
+              >
+                <Text className={`text-sm font-semibold ${vista === v.key ? 'text-white' : 'text-textSecondary'}`}>
+                  {v.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          {/* Corpo SVG — viewBox 0 0 100 195 */}
+          <View className="items-center">
+            <Svg width={150} height={293} viewBox="0 0 100 195">
+              {/* Silhueta de referência (fundo transparente) */}
+              <Circle cx={50} cy={12} r={11} {...bp} />
+              <Rect x={46} y={23} width={8} height={5} rx={2} {...bp} />
+              <Rect x={28} y={28} width={44} height={74} rx={8} {...bp} />
+              <Rect x={8}  y={28} width={16} height={67} rx={7} {...bp} />
+              <Rect x={76} y={28} width={16} height={67} rx={7} {...bp} />
+              <Rect x={24} y={99} width={52} height={13} rx={5} {...bp} />
+              <Rect x={24} y={110} width={24} height={52} rx={8} {...bp} />
+              <Rect x={52} y={110} width={24} height={52} rx={8} {...bp} />
+              <Rect x={26} y={163} width={20} height={28} rx={6} {...bp} />
+              <Rect x={54} y={163} width={20} height={28} rx={6} {...bp} />
+
+              {vista === 'frente' ? (
+                <G>
+                  {/* Ombros / Deltóides */}
+                  <Ellipse cx={17} cy={36} rx={10} ry={12} {...mp('ombros')} />
+                  <Ellipse cx={83} cy={36} rx={10} ry={12} {...mp('ombros')} />
+                  {/* Peitoral */}
+                  <Ellipse cx={38} cy={46} rx={12} ry={10} {...mp('peitoral')} />
+                  <Ellipse cx={62} cy={46} rx={12} ry={10} {...mp('peitoral')} />
+                  {/* Bíceps */}
+                  <Ellipse cx={13} cy={58} rx={6} ry={12} {...mp('biceps')} />
+                  <Ellipse cx={87} cy={58} rx={6} ry={12} {...mp('biceps')} />
+                  {/* Antebraços */}
+                  <Ellipse cx={11} cy={79} rx={5} ry={12} {...mp('antebraco')} />
+                  <Ellipse cx={89} cy={79} rx={5} ry={12} {...mp('antebraco')} />
+                  {/* Abdômen — 6 quadradinhos */}
+                  <Rect x={41} y={59} width={8} height={7} rx={2} {...mp('abdomen')} />
+                  <Rect x={51} y={59} width={8} height={7} rx={2} {...mp('abdomen')} />
+                  <Rect x={41} y={68} width={8} height={7} rx={2} {...mp('abdomen')} />
+                  <Rect x={51} y={68} width={8} height={7} rx={2} {...mp('abdomen')} />
+                  <Rect x={41} y={77} width={8} height={7} rx={2} {...mp('abdomen')} />
+                  <Rect x={51} y={77} width={8} height={7} rx={2} {...mp('abdomen')} />
+                  {/* Oblíquos */}
+                  <Ellipse cx={32} cy={73} rx={5} ry={14} {...mp('obliquos')} />
+                  <Ellipse cx={68} cy={73} rx={5} ry={14} {...mp('obliquos')} />
+                  {/* Quadríceps */}
+                  <Ellipse cx={36} cy={127} rx={11} ry={17} {...mp('quadriceps')} />
+                  <Ellipse cx={64} cy={127} rx={11} ry={17} {...mp('quadriceps')} />
+                  {/* Panturrilhas */}
+                  <Ellipse cx={36} cy={170} rx={8} ry={12} {...mp('panturrilhas')} />
+                  <Ellipse cx={64} cy={170} rx={8} ry={12} {...mp('panturrilhas')} />
+                </G>
+              ) : (
+                <G>
+                  {/* Trapézio */}
+                  <Path d="M 50,28 L 24,36 L 28,58 L 72,58 L 76,36 Z" {...mp('trapezio')} />
+                  {/* Dorsais / Costas */}
+                  <Path d="M 28,38 L 36,40 L 40,90 L 28,90 Z" {...mp('dorsais')} />
+                  <Path d="M 72,38 L 64,40 L 60,90 L 72,90 Z" {...mp('dorsais')} />
+                  {/* Lombar */}
+                  <Ellipse cx={50} cy={93} rx={13} ry={6} {...mp('lombar')} />
+                  {/* Tríceps */}
+                  <Ellipse cx={13} cy={58} rx={6} ry={12} {...mp('triceps')} />
+                  <Ellipse cx={87} cy={58} rx={6} ry={12} {...mp('triceps')} />
+                  {/* Glúteos */}
+                  <Ellipse cx={36} cy={115} rx={14} ry={12} {...mp('gluteos')} />
+                  <Ellipse cx={64} cy={115} rx={14} ry={12} {...mp('gluteos')} />
+                  {/* Posteriores / Isquiotibiais */}
+                  <Ellipse cx={36} cy={140} rx={11} ry={18} {...mp('posteriores')} />
+                  <Ellipse cx={64} cy={140} rx={11} ry={18} {...mp('posteriores')} />
+                  {/* Panturrilhas */}
+                  <Ellipse cx={36} cy={170} rx={8} ry={12} {...mp('panturrilhas')} />
+                  <Ellipse cx={64} cy={170} rx={8} ry={12} {...mp('panturrilhas')} />
+                </G>
+              )}
+            </Svg>
+          </View>
+
           {/* Legenda */}
-          <View className="flex-row gap-4 mt-3 pt-3 border-t border-border">
+          <View className="flex-row gap-4 justify-center mt-3 pt-3 border-t border-border">
             {[
-              { cor: '#4ade80', label: 'Baixo' },
-              { cor: '#facc15', label: 'Médio' },
-              { cor: '#f87171', label: 'Alto' },
+              { cor: '#4ade80', label: 'Leve' },
+              { cor: '#facc15', label: 'Moderado' },
+              { cor: '#f87171', label: 'Intenso' },
             ].map((l) => (
               <View key={l.label} className="flex-row items-center gap-1.5">
                 <View style={{ backgroundColor: l.cor }} className="w-3 h-3 rounded-full" />
@@ -119,6 +258,30 @@ function GraficoMusculos() {
               </View>
             ))}
           </View>
+
+          {/* Tags dos grupos trabalhados */}
+          {resultado.length > 0 && (
+            <View className="flex-row flex-wrap gap-2 mt-3">
+              {resultado.slice(0, 8).map((item) => (
+                <View
+                  key={item.musculo}
+                  className="flex-row items-center gap-1.5 px-2.5 py-1 rounded-lg border border-border bg-background"
+                >
+                  <View style={{ backgroundColor: mFill(item.series, maxSeries) }} className="w-2 h-2 rounded-full" />
+                  <Text className="text-textSecondary text-xs">{item.musculo}</Text>
+                  <Text className="text-textMuted text-xs">{item.series}s</Text>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {resultado.length === 0 && (
+            <View className="items-center py-4">
+              <Text className="text-textMuted text-sm">
+                Nenhum treino registrado{periodo === 'dia' ? ' hoje' : periodo === 'semana' ? ' esta semana' : ' este mês'}.
+              </Text>
+            </View>
+          )}
         </>
       )}
     </View>
