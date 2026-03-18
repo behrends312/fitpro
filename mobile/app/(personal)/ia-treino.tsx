@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../../src/services/api';
 
@@ -120,6 +120,7 @@ export default function IATreinoScreen() {
   const [modalAluno, setModalAluno] = useState(false);
   const [planoSalvo, setPlanoSalvo] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
@@ -193,6 +194,7 @@ export default function IATreinoScreen() {
         try {
           const result = await api.post('/ia/salvar-plano', { planoJson: plano, alunoId: currentAlunoId }).then((r) => r.data);
           setPlanoSalvo(true);
+          queryClient.invalidateQueries({ queryKey: ['meus-treinos'] });
           Alert.alert('Treino salvo! 🎉', result.message);
         } catch (err: any) {
           Alert.alert('Erro ao salvar treino', err?.response?.data?.message || err?.message || 'Falha ao salvar. Use o botão abaixo.');
@@ -206,7 +208,7 @@ export default function IATreinoScreen() {
   const salvarMutation = useMutation({
     mutationFn: (plano: PlanoGerado) =>
       api.post('/ia/salvar-plano', { planoJson: plano, alunoId }).then((r) => r.data),
-    onSuccess: (data) => { setPlanoSalvo(true); Alert.alert('Salvo!', data.message); },
+    onSuccess: (data) => { setPlanoSalvo(true); queryClient.invalidateQueries({ queryKey: ['meus-treinos'] }); Alert.alert('Salvo!', data.message); },
     onError: (err: any) => Alert.alert('Erro', err?.response?.data?.message || 'Falha ao salvar.'),
   });
 
