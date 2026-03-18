@@ -11,7 +11,7 @@ async function geminiChat(systemInstruction, history, ultimaMensagem) {
 
   const url = `${GEMINI_BASE}:generateContent?key=${key}`;
   const body = {
-    system_instruction: { parts: [{ text: systemInstruction }] },
+    systemInstruction: { parts: [{ text: systemInstruction }] },
     contents: [
       ...history,
       { role: 'user', parts: [{ text: ultimaMensagem }] },
