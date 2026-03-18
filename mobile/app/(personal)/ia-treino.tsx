@@ -177,28 +177,29 @@ export default function IATreinoScreen() {
         mensagens: msgs.map((m) => ({ role: m.role, content: m.content })),
         contexto: 'personal',
       }).then((r) => r.data.resposta as string),
-    onSuccess: async (resposta) => {
+    onSuccess: (resposta) => {
       const nova: Mensagem = { id: gerarId(), role: 'model', content: resposta };
       const novasMensagens = [...(conversaAtual?.mensagens ?? []), nova];
       const atualizada: Conversa = { ...conversaAtual!, mensagens: novasMensagens, ultimaAtualizacao: new Date().toISOString() };
       setConversaAtual(atualizada);
       const existe = conversas.find((c) => c.id === atualizada.id);
       const novaLista = existe ? conversas.map((c) => (c.id === atualizada.id ? atualizada : c)) : [atualizada, ...conversas];
-      await salvarConversas(novaLista);
+      salvarConversas(novaLista); // fire-and-forget — AsyncStorage failure não dispara onError
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
 
-      // Auto-save plan if an aluno is already selected
+      // Auto-save isolado: void garante que erros não propagam para o TanStack Query
       const plano = extractPlan(resposta);
       const currentAlunoId = alunoIdRef.current;
       if (plano && currentAlunoId) {
-        try {
-          const result = await api.post('/ia/salvar-plano', { planoJson: plano, alunoId: currentAlunoId }).then((r) => r.data);
-          setPlanoSalvo(true);
-          queryClient.invalidateQueries({ queryKey: ['meus-treinos'] });
-          Alert.alert('Treino salvo! 🎉', result.message);
-        } catch (err: any) {
-          Alert.alert('Erro ao salvar treino', err?.response?.data?.message || err?.message || 'Falha ao salvar. Use o botão abaixo.');
-        }
+        void api.post('/ia/salvar-plano', { planoJson: plano, alunoId: currentAlunoId })
+          .then((r) => {
+            setPlanoSalvo(true);
+            queryClient.invalidateQueries({ queryKey: ['meus-treinos'] });
+            Alert.alert('Treino salvo! 🎉', r.data.message);
+          })
+          .catch((err: any) => {
+            Alert.alert('Erro ao salvar treino', err?.response?.data?.message || err?.message || 'Falha ao salvar. Use o botão abaixo.');
+          });
       }
     },
     onError: (err: any) =>
