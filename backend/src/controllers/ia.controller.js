@@ -6,8 +6,8 @@ const User = require('../models/User');
 function getModel(systemInstruction) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('GEMINI_API_KEY não configurada. Obtenha uma chave gratuita em https://aistudio.google.com/apikey');
-  const genAI = new GoogleGenerativeAI(key);
-  return genAI.getGenerativeModel({ model: 'gemini-2.0-flash', systemInstruction });
+  const genAI = new GoogleGenerativeAI(key, { apiVersion: 'v1' });
+  return genAI.getGenerativeModel({ model: 'gemini-1.5-flash', systemInstruction });
 }
 
 const SYSTEM_PERSONAL = `Você é um assistente especialista em prescrição de treinos para personal trainers. Responda SEMPRE em português brasileiro.
