@@ -69,6 +69,46 @@ function stripJson(text: string): string {
   return text.replace(/```json\n?[\s\S]*?\n?```/g, '').trim();
 }
 
+// ── MODAL ALUNO (outside component to avoid remount) ─────────────────────────
+interface ModalAlunoProps {
+  visible: boolean;
+  alunos: any[];
+  onSelect: (id: string, nome: string) => void;
+  onClose: () => void;
+}
+
+function ModalAlunoSelector({ visible, alunos, onSelect, onClose }: ModalAlunoProps) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' }}>
+        <View style={{ backgroundColor: '#1e1e2e', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 40 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>Selecionar Aluno</Text>
+            <TouchableOpacity onPress={onClose}><Ionicons name="close" size={24} color="#9090a8" /></TouchableOpacity>
+          </View>
+          <ScrollView>
+            {alunos.map((a) => (
+              <TouchableOpacity
+                key={a._id}
+                onPress={() => onSelect(a._id, a.nome || a.email)}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#2e2e40' }}
+              >
+                <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(108,99,255,0.2)', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                  <Text style={{ color: '#6C63FF', fontWeight: '700' }}>{(a.nome || a.email)[0].toUpperCase()}</Text>
+                </View>
+                <View>
+                  <Text style={{ color: '#fff', fontWeight: '600' }}>{a.nome || 'Sem nome'}</Text>
+                  <Text style={{ color: '#9090a8', fontSize: 12 }}>{a.email}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function IATreinoScreen() {
   const [tela, setTela] = useState<'lista' | 'chat'>('lista');
   const [conversas, setConversas] = useState<Conversa[]>([]);
@@ -77,6 +117,7 @@ export default function IATreinoScreen() {
   const [alunoId, setAlunoId] = useState('');
   const [alunoNome, setAlunoNome] = useState('');
   const [modalAluno, setModalAluno] = useState(false);
+  const [planoSalvo, setPlanoSalvo] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -92,6 +133,7 @@ export default function IATreinoScreen() {
 
   function abrirConversa(conversa: Conversa) {
     setConversaAtual(conversa);
+    setPlanoSalvo(false);
     setTela('chat');
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 100);
   }
@@ -99,6 +141,7 @@ export default function IATreinoScreen() {
   function novaConversa() {
     const nova: Conversa = { id: gerarId(), titulo: 'Nova conversa', mensagens: [], ultimaAtualizacao: new Date().toISOString() };
     setConversaAtual(nova);
+    setPlanoSalvo(false);
     setTela('chat');
   }
 
@@ -108,6 +151,7 @@ export default function IATreinoScreen() {
     setInput('');
     setAlunoId('');
     setAlunoNome('');
+    setPlanoSalvo(false);
   }
 
   async function excluirConversa(id: string) {
@@ -139,6 +183,18 @@ export default function IATreinoScreen() {
       const novaLista = existe ? conversas.map((c) => (c.id === atualizada.id ? atualizada : c)) : [atualizada, ...conversas];
       await salvarConversas(novaLista);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+
+      // Auto-save plan if an aluno is already selected
+      const plano = extractPlan(resposta);
+      if (plano && alunoId) {
+        try {
+          const result = await api.post('/ia/salvar-plano', { planoJson: plano, alunoId }).then((r) => r.data);
+          setPlanoSalvo(true);
+          Alert.alert('Treino salvo! 🎉', result.message);
+        } catch {
+          // Plan card still visible for manual save
+        }
+      }
     },
     onError: (err: any) =>
       Alert.alert('Erro', err?.response?.data?.message || 'Falha ao comunicar com a IA.'),
@@ -147,7 +203,7 @@ export default function IATreinoScreen() {
   const salvarMutation = useMutation({
     mutationFn: (plano: PlanoGerado) =>
       api.post('/ia/salvar-plano', { planoJson: plano, alunoId }).then((r) => r.data),
-    onSuccess: (data) => Alert.alert('Salvo!', data.message),
+    onSuccess: (data) => { setPlanoSalvo(true); Alert.alert('Salvo!', data.message); },
     onError: (err: any) => Alert.alert('Erro', err?.response?.data?.message || 'Falha ao salvar.'),
   });
 
@@ -163,50 +219,20 @@ export default function IATreinoScreen() {
     setConversaAtual(atualizada);
     setInput('');
 
-    const existe = conversas.find((c) => c.id === atualizada.id);
-    const novaLista = existe ? conversas.map((c) => (c.id === atualizada.id ? atualizada : c)) : [atualizada, ...conversas];
-    await salvarConversas(novaLista);
-
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     chatMutation.mutate(novasMensagens);
   }, [input, conversaAtual, conversas]);
-
-  // ── MODAL ALUNO ──────────────────────────────────────────────────────────
-  const ModalAluno = () => (
-    <Modal visible={modalAluno} transparent animationType="slide" onRequestClose={() => setModalAluno(false)}>
-      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' }}>
-        <View style={{ backgroundColor: '#1e1e2e', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 40 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>Selecionar Aluno</Text>
-            <TouchableOpacity onPress={() => setModalAluno(false)}><Ionicons name="close" size={24} color="#9090a8" /></TouchableOpacity>
-          </View>
-          <ScrollView>
-            {alunos.map((a) => (
-              <TouchableOpacity
-                key={a._id}
-                onPress={() => { setAlunoId(a._id); setAlunoNome(a.nome || a.email); setModalAluno(false); }}
-                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#2e2e40' }}
-              >
-                <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(108,99,255,0.2)', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-                  <Text style={{ color: '#6C63FF', fontWeight: '700' }}>{(a.nome || a.email)[0].toUpperCase()}</Text>
-                </View>
-                <View>
-                  <Text style={{ color: '#fff', fontWeight: '600' }}>{a.nome || 'Sem nome'}</Text>
-                  <Text style={{ color: '#9090a8', fontSize: 12 }}>{a.email}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        </View>
-      </View>
-    </Modal>
-  );
 
   // ── TELA: LISTA ──────────────────────────────────────────────────────────
   if (tela === 'lista') {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: '#13131f' }}>
-        <ModalAluno />
+        <ModalAlunoSelector
+          visible={modalAluno}
+          alunos={alunos}
+          onSelect={(id, nome) => { setAlunoId(id); setAlunoNome(nome); setModalAluno(false); }}
+          onClose={() => setModalAluno(false)}
+        />
         <View style={{ paddingHorizontal: 20, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#2e2e40' }}>
           <Ionicons name="sparkles" size={22} color="#6C63FF" />
           <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700', marginLeft: 10, flex: 1 }}>IA de Treinos</Text>
@@ -271,16 +297,34 @@ export default function IATreinoScreen() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#13131f' }}>
-      <ModalAluno />
+      <ModalAlunoSelector
+        visible={modalAluno}
+        alunos={alunos}
+        onSelect={(id, nome) => { setAlunoId(id); setAlunoNome(nome); setModalAluno(false); }}
+        onClose={() => setModalAluno(false)}
+      />
 
-      <View style={{ paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#2e2e40', gap: 12 }}>
-        <TouchableOpacity onPress={voltar} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name="arrow-back" size={24} color="#9090a8" />
+      <View style={{ paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#2e2e40' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <TouchableOpacity onPress={voltar} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Ionicons name="arrow-back" size={24} color="#9090a8" />
+          </TouchableOpacity>
+          <Ionicons name="sparkles" size={20} color="#6C63FF" />
+          <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', flex: 1 }} numberOfLines={1}>
+            {conversaAtual?.titulo || 'Nova conversa'}
+          </Text>
+        </View>
+        {/* Aluno selector in chat header */}
+        <TouchableOpacity
+          onPress={() => setModalAluno(true)}
+          style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#1e1e2e', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: alunoId ? '#6C63FF44' : '#2e2e40' }}
+        >
+          <Ionicons name="person-outline" size={14} color={alunoId ? '#6C63FF' : '#5a5a70'} />
+          <Text style={{ color: alunoId ? '#c0c0d8' : '#5a5a70', fontSize: 13, flex: 1 }}>
+            {alunoNome || 'Selecionar aluno para salvar treinos automaticamente'}
+          </Text>
+          <Ionicons name="chevron-down" size={13} color="#5a5a70" />
         </TouchableOpacity>
-        <Ionicons name="sparkles" size={20} color="#6C63FF" />
-        <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700', flex: 1 }} numberOfLines={1}>
-          {conversaAtual?.titulo || 'Nova conversa'}
-        </Text>
       </View>
 
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -317,12 +361,14 @@ export default function IATreinoScreen() {
                 )}
 
                 {plano && (
-                  <View style={{ width: '100%', marginTop: 10, backgroundColor: '#1e1e2e', borderRadius: 18, borderWidth: 1, borderColor: 'rgba(108,99,255,0.3)', overflow: 'hidden' }}>
-                    <View style={{ backgroundColor: 'rgba(108,99,255,0.1)', paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Ionicons name="clipboard-outline" size={18} color="#6C63FF" />
+                  <View style={{ width: '100%', marginTop: 10, backgroundColor: '#1e1e2e', borderRadius: 18, borderWidth: 1, borderColor: planoSalvo ? 'rgba(52,211,153,0.4)' : 'rgba(108,99,255,0.3)', overflow: 'hidden' }}>
+                    <View style={{ backgroundColor: planoSalvo ? 'rgba(52,211,153,0.1)' : 'rgba(108,99,255,0.1)', paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Ionicons name={planoSalvo ? 'checkmark-circle' : 'clipboard-outline'} size={18} color={planoSalvo ? '#34d399' : '#6C63FF'} />
                       <View style={{ flex: 1 }}>
                         <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{plano.plano.nome}</Text>
-                        <Text style={{ color: '#9090a8', fontSize: 12, marginTop: 2 }}>{plano.treinos.length} treinos gerados</Text>
+                        <Text style={{ color: '#9090a8', fontSize: 12, marginTop: 2 }}>
+                          {planoSalvo ? `Salvo para ${alunoNome} ✓` : `${plano.treinos.length} treinos gerados`}
+                        </Text>
                       </View>
                     </View>
                     {plano.treinos.map((t, i) => {
@@ -339,24 +385,28 @@ export default function IATreinoScreen() {
                         </View>
                       );
                     })}
-                    <View style={{ padding: 14, borderTopWidth: 1, borderTopColor: '#2e2e40', gap: 10 }}>
-                      <TouchableOpacity onPress={() => setModalAluno(true)}
-                        style={{ backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#2e2e40', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <Text style={{ color: alunoNome ? '#fff' : '#5a5a70', fontSize: 14 }}>{alunoNome || 'Selecionar aluno para salvar...'}</Text>
-                        <Ionicons name="chevron-down" size={16} color="#9090a8" />
-                      </TouchableOpacity>
-                      {alunoId && (
-                        <TouchableOpacity onPress={() => salvarMutation.mutate(plano)} disabled={salvarMutation.isPending}
-                          style={{ backgroundColor: '#6C63FF', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}>
-                          {salvarMutation.isPending ? <ActivityIndicator color="white" /> : (
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                              <Ionicons name="save-outline" size={18} color="white" />
-                              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Salvar para {alunoNome}</Text>
-                            </View>
-                          )}
-                        </TouchableOpacity>
-                      )}
-                    </View>
+                    {!planoSalvo && (
+                      <View style={{ padding: 14, borderTopWidth: 1, borderTopColor: '#2e2e40', gap: 10 }}>
+                        {!alunoId && (
+                          <TouchableOpacity onPress={() => setModalAluno(true)}
+                            style={{ backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#2e2e40', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <Text style={{ color: '#5a5a70', fontSize: 14 }}>Selecionar aluno para salvar...</Text>
+                            <Ionicons name="chevron-down" size={16} color="#9090a8" />
+                          </TouchableOpacity>
+                        )}
+                        {alunoId && (
+                          <TouchableOpacity onPress={() => salvarMutation.mutate(plano)} disabled={salvarMutation.isPending}
+                            style={{ backgroundColor: '#6C63FF', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}>
+                            {salvarMutation.isPending ? <ActivityIndicator color="white" /> : (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                <Ionicons name="save-outline" size={18} color="white" />
+                                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Salvar para {alunoNome}</Text>
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    )}
                   </View>
                 )}
               </View>

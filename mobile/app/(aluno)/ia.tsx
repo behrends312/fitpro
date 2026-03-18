@@ -140,12 +140,6 @@ export default function AlunoIAScreen() {
     setConversaAtual(atualizada);
     setInput('');
 
-    const existe = conversas.find((c) => c.id === atualizada.id);
-    const novaLista = existe
-      ? conversas.map((c) => (c.id === atualizada.id ? atualizada : c))
-      : [atualizada, ...conversas];
-    await salvarConversas(novaLista);
-
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     chatMutation.mutate(novasMensagens);
   }, [input, conversaAtual, conversas]);
