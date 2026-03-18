@@ -43,6 +43,10 @@ const TreinoSchema = new Schema(
     // Quando executar
     diasSemana: [{ type: String, enum: ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'] }],
 
+    // Expiração (copiado do plano ao atribuir)
+    dataInicio: { type: Date, default: null },
+    duracaoMeses: { type: Number, default: null },
+
     ativo: { type: Boolean, default: true },
   },
   { timestamps: true }

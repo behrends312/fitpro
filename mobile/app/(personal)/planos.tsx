@@ -32,6 +32,7 @@ interface Plano {
   descricao: string;
   nivel: 'iniciante' | 'intermediario' | 'avancado';
   duracaoMeses?: number | null;
+  dataInicio?: string | null;
   treinos: Array<{ ordem: number; treino: { _id: string; nome: string; tipo: string; exercicios: any[] } }>;
   createdAt: string;
 }
@@ -154,6 +155,11 @@ function ModalPlano({
   const [duracaoMeses, setDuracaoMeses] = useState<number | null>(
     planoEdit?.duracaoMeses ?? null
   );
+  const [dataInicio, setDataInicio] = useState<string>(
+    planoEdit?.dataInicio
+      ? new Date(planoEdit.dataInicio).toISOString().slice(0, 10)
+      : new Date().toISOString().slice(0, 10)
+  );
 
   // ── Step ────────────────────────────────────────────────────────────────────
   const [stepAtual, setStepAtual] = useState<'info' | 'treinos'>('info');
@@ -212,6 +218,7 @@ function ModalPlano({
         descricao,
         nivel,
         duracaoMeses,
+        dataInicio,
         treinos: treinos.map((t) => ({
           ...t,
           exercicios: t.exercicios.map((ex) => ({
@@ -233,7 +240,7 @@ function ModalPlano({
   // Salvar informações do plano (edit — só info)
   const salvarInfoMutation = useMutation({
     mutationFn: () =>
-      api.patch(`/planos/${planoEdit!._id}`, { nome, descricao, nivel, duracaoMeses }),
+      api.patch(`/planos/${planoEdit!._id}`, { nome, descricao, nivel, duracaoMeses, dataInicio }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['planos'] });
       Alert.alert('Salvo!', 'Informações do plano atualizadas.');
@@ -458,7 +465,7 @@ function ModalPlano({
                   <Text className="text-textSecondary text-xs font-semibold uppercase tracking-widest mb-2">
                     Duração do plano
                   </Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-6 -mx-1" contentContainerStyle={{ paddingHorizontal: 4 }}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-5 -mx-1" contentContainerStyle={{ paddingHorizontal: 4 }}>
                     {DURACOES.map((d) => (
                       <TouchableOpacity
                         key={String(d.valor)}
@@ -475,6 +482,63 @@ function ModalPlano({
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
+
+                  {/* Data de início */}
+                  <Text className="text-textSecondary text-xs font-semibold uppercase tracking-widest mb-2">
+                    Data de início
+                  </Text>
+                  <View className="bg-background border border-border rounded-xl px-4 py-3 mb-2 flex-row items-center">
+                    <Ionicons name="calendar-outline" size={16} color="#9090a8" style={{ marginRight: 8 }} />
+                    <TextInput
+                      value={dataInicio}
+                      onChangeText={(v) => setDataInicio(v)}
+                      placeholder="AAAA-MM-DD"
+                      placeholderTextColor="#5a5a70"
+                      keyboardType="numbers-and-punctuation"
+                      maxLength={10}
+                      className="flex-1 text-textPrimary text-base"
+                    />
+                  </View>
+                  {/* Presets de início */}
+                  <View className="flex-row gap-2 mb-6">
+                    {[
+                      { label: 'Hoje', offset: 0 },
+                      { label: 'Em 1 semana', offset: 7 },
+                      { label: 'Próximo mês', offset: 30 },
+                    ].map(({ label, offset }) => {
+                      const d = new Date();
+                      d.setDate(d.getDate() + offset);
+                      const val = d.toISOString().slice(0, 10);
+                      return (
+                        <TouchableOpacity
+                          key={label}
+                          onPress={() => setDataInicio(val)}
+                          style={{
+                            paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1,
+                            backgroundColor: dataInicio === val ? '#6C63FF' : '#1a1a2e',
+                            borderColor: dataInicio === val ? '#6C63FF' : '#2e2e40',
+                          }}
+                        >
+                          <Text style={{ fontSize: 11, fontWeight: '600', color: dataInicio === val ? '#fff' : '#9090a8' }}>{label}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  {/* Expiração calculada */}
+                  {duracaoMeses && dataInicio && (
+                    <View className="bg-warning/10 border border-warning/30 rounded-xl px-4 py-3 mb-5 flex-row items-center gap-2">
+                      <Ionicons name="time-outline" size={16} color="#fbbf24" />
+                      <Text className="text-warning text-xs flex-1">
+                        Expira em{' '}
+                        {(() => {
+                          const exp = new Date(dataInicio);
+                          exp.setMonth(exp.getMonth() + duracaoMeses);
+                          return exp.toLocaleDateString('pt-BR');
+                        })()}
+                      </Text>
+                    </View>
+                  )}
 
                   {isEdit ? (
                     <View className="gap-3 mb-8">

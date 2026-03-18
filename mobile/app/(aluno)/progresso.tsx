@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { LineChart } from 'react-native-gifted-charts';
-import Svg, { Circle, Rect, Ellipse, Path, G } from 'react-native-svg';
+import Svg, { Circle, Rect, Ellipse, Path, G, Defs, LinearGradient, RadialGradient, Stop } from 'react-native-svg';
 import api from '../../src/services/api';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -41,11 +41,7 @@ type MuscleKey =
   | 'gluteos' | 'posteriores';
 
 function normalizarMusculos(nome: string): MuscleKey[] {
-  const n = nome
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim();
+  const n = nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
   const mapa: Record<string, MuscleKey[]> = {
     'peitoral': ['peitoral'], 'peito': ['peitoral'],
     'costas': ['dorsais', 'trapezio'], 'dorsais': ['dorsais'],
@@ -53,41 +49,16 @@ function normalizarMusculos(nome: string): MuscleKey[] {
     'ombros': ['ombros'], 'deltoides': ['ombros'], 'deltoide': ['ombros'],
     'biceps': ['biceps'],
     'triceps': ['triceps'],
-    'abdomen': ['abdomen'], 'abdominal': ['abdomen'],
-    'abdominais': ['abdomen'], 'core': ['abdomen'],
+    'abdomen': ['abdomen'], 'abdominal': ['abdomen'], 'abdominais': ['abdomen'], 'core': ['abdomen'],
     'obliquos': ['obliquos'], 'obliquo': ['obliquos'],
     'gluteos': ['gluteos'], 'gluteo': ['gluteos'],
-    'quadriceps': ['quadriceps'], 'quadricep': ['quadriceps'],
-    'coxa': ['quadriceps'], 'coxas': ['quadriceps'],
+    'quadriceps': ['quadriceps'], 'quadricep': ['quadriceps'], 'coxa': ['quadriceps'], 'coxas': ['quadriceps'],
     'posteriores': ['posteriores'], 'isquiotibiais': ['posteriores'],
-    'panturrilhas': ['panturrilhas'], 'panturrilha': ['panturrilhas'],
-    'gemeos': ['panturrilhas'],
+    'panturrilhas': ['panturrilhas'], 'panturrilha': ['panturrilhas'], 'gemeos': ['panturrilhas'],
     'lombar': ['lombar'],
     'antebraco': ['antebraco'], 'antebracos': ['antebraco'],
   };
   return mapa[n] ?? [];
-}
-
-const BODY_BG     = 'rgba(60,60,110,0.25)';
-const BODY_STROKE = 'rgba(110,110,200,0.35)';
-
-function mFill(series: number, max: number) {
-  if (series === 0) return 'rgba(55,55,95,0.45)';
-  const p = series / max;
-  if (p >= 0.7) return '#f87171';
-  if (p >= 0.4) return '#facc15';
-  return '#4ade80';
-}
-function mStroke(series: number, max: number) {
-  if (series === 0) return 'rgba(90,90,150,0.5)';
-  const p = series / max;
-  if (p >= 0.7) return '#fca5a5';
-  if (p >= 0.4) return '#fde047';
-  return '#86efac';
-}
-function mOp(series: number, max: number) {
-  if (series === 0) return 1;
-  return 0.38 + (series / max) * 0.52;
 }
 
 function GraficoMusculos() {
@@ -112,25 +83,81 @@ function GraficoMusculos() {
     return m;
   }, [resultado]);
 
-  const f  = (k: string) => mFill(muscMap[k] ?? 0, maxSeries);
-  const st = (k: string) => mStroke(muscMap[k] ?? 0, maxSeries);
-  const op = (k: string) => mOp(muscMap[k] ?? 0, maxSeries);
-  const mp = (k: string) => ({ fill: f(k), stroke: st(k), opacity: op(k), strokeWidth: 0.9 });
-  const bp = { fill: BODY_BG, stroke: BODY_STROKE, strokeWidth: 0.5 };
+  // Gradient ID por intensidade
+  function gId(k: string) {
+    const s = muscMap[k] ?? 0;
+    if (s === 0) return 'url(#gInativo)';
+    const p = s / maxSeries;
+    if (p >= 0.7) return 'url(#gAlto)';
+    if (p >= 0.4) return 'url(#gMedio)';
+    return 'url(#gBaixo)';
+  }
+  function gStroke(k: string) {
+    const s = muscMap[k] ?? 0;
+    if (s === 0) return '#2e2e58';
+    const p = s / maxSeries;
+    if (p >= 0.7) return '#fca5a5';
+    if (p >= 0.4) return '#fde68a';
+    return '#6ee7b7';
+  }
+  function gOp(k: string) {
+    const s = muscMap[k] ?? 0;
+    if (s === 0) return 0.7;
+    return 0.82 + (s / maxSeries) * 0.18;
+  }
+  // Props completos para uma shape muscular
+  function mp(k: string) {
+    return { fill: gId(k), stroke: gStroke(k), strokeWidth: 0.7, opacity: gOp(k) };
+  }
+  // Specular highlight — só se músculo ativo
+  function hl(k: string, cx: number, cy: number, rx: number, ry: number) {
+    if ((muscMap[k] ?? 0) === 0) return null;
+    return <Ellipse cx={cx} cy={cy - ry * 0.28} rx={rx * 0.55} ry={ry * 0.32} fill="url(#gSpec)" />;
+  }
 
   const periodos: Array<{ key: 'dia' | 'semana' | 'mes'; label: string }> = [
     { key: 'dia', label: 'Hoje' },
     { key: 'semana', label: 'Semana' },
     { key: 'mes', label: 'Mês' },
   ];
-  const vistas: Array<{ key: 'frente' | 'costas'; label: string }> = [
-    { key: 'frente', label: 'Frente' },
-    { key: 'costas', label: 'Costas' },
-  ];
+
+  // Silhueta base (body shape), mesmo para frente e costas
+  const BaseSilhueta = () => (
+    <G fill="url(#gCorpo)" stroke="#2a2a55" strokeWidth="0.5">
+      {/* Cabeça */}
+      <Circle cx={70} cy={17} r={16} />
+      {/* Pescoço */}
+      <Rect x={63} y={32} width={14} height={13} rx={3} />
+      {/* Torso — ombros + peito + abdômen */}
+      <Rect x={22} y={38} width={96} height={78} rx={10} />
+      {/* Braço esquerdo superior */}
+      <Rect x={6} y={40} width={18} height={78} rx={8} />
+      {/* Braço direito superior */}
+      <Rect x={116} y={40} width={18} height={78} rx={8} />
+      {/* Antebraço esquerdo */}
+      <Rect x={8} y={120} width={14} height={60} rx={7} />
+      {/* Antebraço direito */}
+      <Rect x={118} y={120} width={14} height={60} rx={7} />
+      {/* Pelve */}
+      <Rect x={24} y={114} width={92} height={32} rx={8} />
+      {/* Coxa esquerda */}
+      <Rect x={24} y={142} width={38} height={78} rx={12} />
+      {/* Coxa direita */}
+      <Rect x={78} y={142} width={38} height={78} rx={12} />
+      {/* Perna esquerda inferior */}
+      <Rect x={28} y={222} width={30} height={66} rx={9} />
+      {/* Perna direita inferior */}
+      <Rect x={82} y={222} width={30} height={66} rx={9} />
+      {/* Pé esquerdo */}
+      <Rect x={22} y={283} width={42} height={13} rx={6} />
+      {/* Pé direito */}
+      <Rect x={76} y={283} width={42} height={13} rx={6} />
+    </G>
+  );
 
   return (
     <View className="mx-5 mt-5 bg-surface border border-border rounded-2xl p-5">
-      {/* Header + filtro período */}
+      {/* Header + período */}
       <View className="flex-row justify-between items-center mb-4">
         <Text className="text-textPrimary font-bold text-base">Músculos treinados</Text>
         <View className="flex-row gap-1">
@@ -138,11 +165,13 @@ function GraficoMusculos() {
             <TouchableOpacity
               key={p.key}
               onPress={() => setPeriodo(p.key)}
-              className={`px-2.5 py-1 rounded-lg border ${
-                periodo === p.key ? 'bg-primary border-primary' : 'bg-background border-border'
-              }`}
+              style={{
+                paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1,
+                backgroundColor: periodo === p.key ? '#6C63FF' : '#1a1a2e',
+                borderColor: periodo === p.key ? '#6C63FF' : '#2e2e40',
+              }}
             >
-              <Text className={`text-xs font-semibold ${periodo === p.key ? 'text-white' : 'text-textSecondary'}`}>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: periodo === p.key ? '#fff' : '#9090a8' }}>
                 {p.label}
               </Text>
             </TouchableOpacity>
@@ -151,133 +180,226 @@ function GraficoMusculos() {
       </View>
 
       {isLoading ? (
-        <View className="h-56 items-center justify-center">
+        <View style={{ height: 300, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color="#6C63FF" />
         </View>
       ) : (
         <>
           {/* Toggle frente / costas */}
-          <View className="flex-row gap-2 justify-center mb-5">
-            {vistas.map((v) => (
+          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 16 }}>
+            {(['frente', 'costas'] as const).map((v) => (
               <TouchableOpacity
-                key={v.key}
-                onPress={() => setVista(v.key)}
-                className={`px-6 py-2 rounded-xl border ${
-                  vista === v.key ? 'bg-primary border-primary' : 'bg-background border-border'
-                }`}
+                key={v}
+                onPress={() => setVista(v)}
+                style={{
+                  paddingHorizontal: 24, paddingVertical: 8, borderRadius: 12, borderWidth: 1,
+                  backgroundColor: vista === v ? '#6C63FF' : '#1a1a2e',
+                  borderColor: vista === v ? '#6C63FF' : '#2e2e40',
+                }}
               >
-                <Text className={`text-sm font-semibold ${vista === v.key ? 'text-white' : 'text-textSecondary'}`}>
-                  {v.label}
+                <Text style={{ fontWeight: '600', fontSize: 13, color: vista === v ? '#fff' : '#9090a8' }}>
+                  {v === 'frente' ? 'Frente' : 'Costas'}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          {/* Corpo SVG — viewBox 0 0 100 195 */}
-          <View className="items-center">
-            <Svg width={150} height={293} viewBox="0 0 100 195">
-              {/* Silhueta de referência (fundo transparente) */}
-              <Circle cx={50} cy={12} r={11} {...bp} />
-              <Rect x={46} y={23} width={8} height={5} rx={2} {...bp} />
-              <Rect x={28} y={28} width={44} height={74} rx={8} {...bp} />
-              <Rect x={8}  y={28} width={16} height={67} rx={7} {...bp} />
-              <Rect x={76} y={28} width={16} height={67} rx={7} {...bp} />
-              <Rect x={24} y={99} width={52} height={13} rx={5} {...bp} />
-              <Rect x={24} y={110} width={24} height={52} rx={8} {...bp} />
-              <Rect x={52} y={110} width={24} height={52} rx={8} {...bp} />
-              <Rect x={26} y={163} width={20} height={28} rx={6} {...bp} />
-              <Rect x={54} y={163} width={20} height={28} rx={6} {...bp} />
+          {/* SVG corpo */}
+          <View style={{ alignItems: 'center' }}>
+            <Svg width={200} height={428} viewBox="0 0 140 300">
+              <Defs>
+                {/* Silhueta do corpo: gradiente lateral (simula forma cilíndrica) */}
+                <LinearGradient id="gCorpo" x1="0" y1="0" x2="1" y2="0">
+                  <Stop offset="0"   stopColor="#141428" stopOpacity="0.95" />
+                  <Stop offset="0.3" stopColor="#20204a" stopOpacity="1"    />
+                  <Stop offset="0.7" stopColor="#20204a" stopOpacity="1"    />
+                  <Stop offset="1"   stopColor="#141428" stopOpacity="0.95" />
+                </LinearGradient>
+
+                {/* Músculo inativo */}
+                <LinearGradient id="gInativo" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor="#38387a" stopOpacity="0.65" />
+                  <Stop offset="1" stopColor="#1e1e45" stopOpacity="0.65" />
+                </LinearGradient>
+
+                {/* Intensidade baixa — verde */}
+                <LinearGradient id="gBaixo" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0"   stopColor="#6ee7b7" stopOpacity="1" />
+                  <Stop offset="0.5" stopColor="#10b981" stopOpacity="1" />
+                  <Stop offset="1"   stopColor="#065f46" stopOpacity="1" />
+                </LinearGradient>
+
+                {/* Intensidade média — amarelo */}
+                <LinearGradient id="gMedio" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0"   stopColor="#fde68a" stopOpacity="1" />
+                  <Stop offset="0.5" stopColor="#f59e0b" stopOpacity="1" />
+                  <Stop offset="1"   stopColor="#92400e" stopOpacity="1" />
+                </LinearGradient>
+
+                {/* Intensidade alta — vermelho */}
+                <LinearGradient id="gAlto" x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0"   stopColor="#fca5a5" stopOpacity="1" />
+                  <Stop offset="0.5" stopColor="#ef4444" stopOpacity="1" />
+                  <Stop offset="1"   stopColor="#7f1d1d" stopOpacity="1" />
+                </LinearGradient>
+
+                {/* Specular highlight (reflexo de luz) */}
+                <RadialGradient id="gSpec" cx="50%" cy="25%" r="55%" fx="50%" fy="25%">
+                  <Stop offset="0"   stopColor="white" stopOpacity="0.32" />
+                  <Stop offset="1"   stopColor="white" stopOpacity="0"    />
+                </RadialGradient>
+              </Defs>
+
+              {/* Silhueta base */}
+              <BaseSilhueta />
 
               {vista === 'frente' ? (
                 <G>
-                  {/* Ombros / Deltóides */}
-                  <Ellipse cx={17} cy={36} rx={10} ry={12} {...mp('ombros')} />
-                  <Ellipse cx={83} cy={36} rx={10} ry={12} {...mp('ombros')} />
+                  {/* Deltoides */}
+                  <Ellipse cx={12} cy={60} rx={11} ry={18} {...mp('ombros')} />
+                  <Ellipse cx={128} cy={60} rx={11} ry={18} {...mp('ombros')} />
+                  {hl('ombros', 12, 60, 11, 18)}{hl('ombros', 128, 60, 11, 18)}
+
                   {/* Peitoral */}
-                  <Ellipse cx={38} cy={46} rx={12} ry={10} {...mp('peitoral')} />
-                  <Ellipse cx={62} cy={46} rx={12} ry={10} {...mp('peitoral')} />
+                  <Ellipse cx={44} cy={72} rx={20} ry={17} {...mp('peitoral')} />
+                  <Ellipse cx={96} cy={72} rx={20} ry={17} {...mp('peitoral')} />
+                  {hl('peitoral', 44, 72, 20, 17)}{hl('peitoral', 96, 72, 20, 17)}
+
                   {/* Bíceps */}
-                  <Ellipse cx={13} cy={58} rx={6} ry={12} {...mp('biceps')} />
-                  <Ellipse cx={87} cy={58} rx={6} ry={12} {...mp('biceps')} />
+                  <Ellipse cx={11} cy={92} rx={8} ry={18} {...mp('biceps')} />
+                  <Ellipse cx={129} cy={92} rx={8} ry={18} {...mp('biceps')} />
+                  {hl('biceps', 11, 92, 8, 18)}{hl('biceps', 129, 92, 8, 18)}
+
                   {/* Antebraços */}
-                  <Ellipse cx={11} cy={79} rx={5} ry={12} {...mp('antebraco')} />
-                  <Ellipse cx={89} cy={79} rx={5} ry={12} {...mp('antebraco')} />
-                  {/* Abdômen — 6 quadradinhos */}
-                  <Rect x={41} y={59} width={8} height={7} rx={2} {...mp('abdomen')} />
-                  <Rect x={51} y={59} width={8} height={7} rx={2} {...mp('abdomen')} />
-                  <Rect x={41} y={68} width={8} height={7} rx={2} {...mp('abdomen')} />
-                  <Rect x={51} y={68} width={8} height={7} rx={2} {...mp('abdomen')} />
-                  <Rect x={41} y={77} width={8} height={7} rx={2} {...mp('abdomen')} />
-                  <Rect x={51} y={77} width={8} height={7} rx={2} {...mp('abdomen')} />
+                  <Ellipse cx={13} cy={138} rx={6} ry={22} {...mp('antebraco')} />
+                  <Ellipse cx={127} cy={138} rx={6} ry={22} {...mp('antebraco')} />
+                  {hl('antebraco', 13, 138, 6, 22)}{hl('antebraco', 127, 138, 6, 22)}
+
+                  {/* Abdômen — 6-pack */}
+                  {[0, 1, 2].map((row) => [0, 1].map((col) => {
+                    const cx = col === 0 ? 57 : 83;
+                    const cy = 85 + row * 12;
+                    return (
+                      <G key={`ab${row}${col}`}>
+                        <Rect x={cx - 8} y={cy - 5} width={14} height={10} rx={3} {...mp('abdomen')} />
+                        {(muscMap['abdomen'] ?? 0) > 0 && (
+                          <Rect x={cx - 5} y={cy - 4} width={8} height={4} rx={2} fill="url(#gSpec)" />
+                        )}
+                      </G>
+                    );
+                  }))}
+
                   {/* Oblíquos */}
-                  <Ellipse cx={32} cy={73} rx={5} ry={14} {...mp('obliquos')} />
-                  <Ellipse cx={68} cy={73} rx={5} ry={14} {...mp('obliquos')} />
+                  <Ellipse cx={36} cy={99} rx={10} ry={22} {...mp('obliquos')} />
+                  <Ellipse cx={104} cy={99} rx={10} ry={22} {...mp('obliquos')} />
+                  {hl('obliquos', 36, 99, 10, 22)}{hl('obliquos', 104, 99, 10, 22)}
+
                   {/* Quadríceps */}
-                  <Ellipse cx={36} cy={127} rx={11} ry={17} {...mp('quadriceps')} />
-                  <Ellipse cx={64} cy={127} rx={11} ry={17} {...mp('quadriceps')} />
+                  <Ellipse cx={43} cy={184} rx={17} ry={30} {...mp('quadriceps')} />
+                  <Ellipse cx={97} cy={184} rx={17} ry={30} {...mp('quadriceps')} />
+                  {hl('quadriceps', 43, 184, 17, 30)}{hl('quadriceps', 97, 184, 17, 30)}
+
                   {/* Panturrilhas */}
-                  <Ellipse cx={36} cy={170} rx={8} ry={12} {...mp('panturrilhas')} />
-                  <Ellipse cx={64} cy={170} rx={8} ry={12} {...mp('panturrilhas')} />
+                  <Ellipse cx={43} cy={248} rx={12} ry={22} {...mp('panturrilhas')} />
+                  <Ellipse cx={97} cy={248} rx={12} ry={22} {...mp('panturrilhas')} />
+                  {hl('panturrilhas', 43, 248, 12, 22)}{hl('panturrilhas', 97, 248, 12, 22)}
                 </G>
               ) : (
                 <G>
+                  {/* Deltoides posteriores */}
+                  <Ellipse cx={12} cy={58} rx={11} ry={17} {...mp('ombros')} />
+                  <Ellipse cx={128} cy={58} rx={11} ry={17} {...mp('ombros')} />
+                  {hl('ombros', 12, 58, 11, 17)}{hl('ombros', 128, 58, 11, 17)}
+
                   {/* Trapézio */}
-                  <Path d="M 50,28 L 24,36 L 28,58 L 72,58 L 76,36 Z" {...mp('trapezio')} />
-                  {/* Dorsais / Costas */}
-                  <Path d="M 28,38 L 36,40 L 40,90 L 28,90 Z" {...mp('dorsais')} />
-                  <Path d="M 72,38 L 64,40 L 60,90 L 72,90 Z" {...mp('dorsais')} />
-                  {/* Lombar */}
-                  <Ellipse cx={50} cy={93} rx={13} ry={6} {...mp('lombar')} />
+                  <Path d="M70,33 L26,50 L32,76 L108,76 L114,50 Z" {...mp('trapezio')} />
+                  {(muscMap['trapezio'] ?? 0) > 0 && (
+                    <Ellipse cx={70} cy={52} rx={22} ry={10} fill="url(#gSpec)" />
+                  )}
+
+                  {/* Dorsais (Lats) */}
+                  <Path d="M32,52 L46,62 L50,112 L30,112 Z" {...mp('dorsais')} />
+                  <Path d="M108,52 L94,62 L90,112 L110,112 Z" {...mp('dorsais')} />
+                  {(muscMap['dorsais'] ?? 0) > 0 && (
+                    <>
+                      <Ellipse cx={38} cy={72} rx={8} ry={8} fill="url(#gSpec)" />
+                      <Ellipse cx={102} cy={72} rx={8} ry={8} fill="url(#gSpec)" />
+                    </>
+                  )}
+
                   {/* Tríceps */}
-                  <Ellipse cx={13} cy={58} rx={6} ry={12} {...mp('triceps')} />
-                  <Ellipse cx={87} cy={58} rx={6} ry={12} {...mp('triceps')} />
+                  <Ellipse cx={11} cy={92} rx={8} ry={18} {...mp('triceps')} />
+                  <Ellipse cx={129} cy={92} rx={8} ry={18} {...mp('triceps')} />
+                  {hl('triceps', 11, 92, 8, 18)}{hl('triceps', 129, 92, 8, 18)}
+
+                  {/* Antebraços */}
+                  <Ellipse cx={13} cy={138} rx={6} ry={22} {...mp('antebraco')} />
+                  <Ellipse cx={127} cy={138} rx={6} ry={22} {...mp('antebraco')} />
+                  {hl('antebraco', 13, 138, 6, 22)}{hl('antebraco', 127, 138, 6, 22)}
+
+                  {/* Lombar (Eretor espinhal) */}
+                  <Rect x={54} y={106} width={14} height={28} rx={5} {...mp('lombar')} />
+                  <Rect x={72} y={106} width={14} height={28} rx={5} {...mp('lombar')} />
+                  {(muscMap['lombar'] ?? 0) > 0 && (
+                    <>
+                      <Ellipse cx={61} cy={112} rx={5} ry={7} fill="url(#gSpec)" />
+                      <Ellipse cx={79} cy={112} rx={5} ry={7} fill="url(#gSpec)" />
+                    </>
+                  )}
+
                   {/* Glúteos */}
-                  <Ellipse cx={36} cy={115} rx={14} ry={12} {...mp('gluteos')} />
-                  <Ellipse cx={64} cy={115} rx={14} ry={12} {...mp('gluteos')} />
-                  {/* Posteriores / Isquiotibiais */}
-                  <Ellipse cx={36} cy={140} rx={11} ry={18} {...mp('posteriores')} />
-                  <Ellipse cx={64} cy={140} rx={11} ry={18} {...mp('posteriores')} />
+                  <Ellipse cx={43} cy={155} rx={21} ry={19} {...mp('gluteos')} />
+                  <Ellipse cx={97} cy={155} rx={21} ry={19} {...mp('gluteos')} />
+                  {hl('gluteos', 43, 155, 21, 19)}{hl('gluteos', 97, 155, 21, 19)}
+
+                  {/* Posteriores (Isquiotibiais) */}
+                  <Ellipse cx={43} cy={193} rx={16} ry={28} {...mp('posteriores')} />
+                  <Ellipse cx={97} cy={193} rx={16} ry={28} {...mp('posteriores')} />
+                  {hl('posteriores', 43, 193, 16, 28)}{hl('posteriores', 97, 193, 16, 28)}
+
                   {/* Panturrilhas */}
-                  <Ellipse cx={36} cy={170} rx={8} ry={12} {...mp('panturrilhas')} />
-                  <Ellipse cx={64} cy={170} rx={8} ry={12} {...mp('panturrilhas')} />
+                  <Ellipse cx={43} cy={248} rx={12} ry={22} {...mp('panturrilhas')} />
+                  <Ellipse cx={97} cy={248} rx={12} ry={22} {...mp('panturrilhas')} />
+                  {hl('panturrilhas', 43, 248, 12, 22)}{hl('panturrilhas', 97, 248, 12, 22)}
                 </G>
               )}
             </Svg>
           </View>
 
           {/* Legenda */}
-          <View className="flex-row gap-4 justify-center mt-3 pt-3 border-t border-border">
+          <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 20, marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#2e2e40' }}>
             {[
-              { cor: '#4ade80', label: 'Leve' },
-              { cor: '#facc15', label: 'Moderado' },
-              { cor: '#f87171', label: 'Intenso' },
+              { cor: '#10b981', label: 'Leve' },
+              { cor: '#f59e0b', label: 'Moderado' },
+              { cor: '#ef4444', label: 'Intenso' },
             ].map((l) => (
-              <View key={l.label} className="flex-row items-center gap-1.5">
-                <View style={{ backgroundColor: l.cor }} className="w-3 h-3 rounded-full" />
-                <Text className="text-textMuted text-xs">{l.label}</Text>
+              <View key={l.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: l.cor }} />
+                <Text style={{ color: '#9090a8', fontSize: 11 }}>{l.label}</Text>
               </View>
             ))}
           </View>
 
           {/* Tags dos grupos trabalhados */}
           {resultado.length > 0 && (
-            <View className="flex-row flex-wrap gap-2 mt-3">
-              {resultado.slice(0, 8).map((item) => (
-                <View
-                  key={item.musculo}
-                  className="flex-row items-center gap-1.5 px-2.5 py-1 rounded-lg border border-border bg-background"
-                >
-                  <View style={{ backgroundColor: mFill(item.series, maxSeries) }} className="w-2 h-2 rounded-full" />
-                  <Text className="text-textSecondary text-xs">{item.musculo}</Text>
-                  <Text className="text-textMuted text-xs">{item.series}s</Text>
-                </View>
-              ))}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 12 }}>
+              {resultado.slice(0, 10).map((item) => {
+                const p = item.series / maxSeries;
+                const cor = p >= 0.7 ? '#ef4444' : p >= 0.4 ? '#f59e0b' : '#10b981';
+                return (
+                  <View key={item.musculo} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#2e2e40', backgroundColor: '#1a1a2e' }}>
+                    <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: cor }} />
+                    <Text style={{ color: '#c0c0d8', fontSize: 11 }}>{item.musculo}</Text>
+                    <Text style={{ color: '#9090a8', fontSize: 10 }}>{item.series}s</Text>
+                  </View>
+                );
+              })}
             </View>
           )}
 
           {resultado.length === 0 && (
-            <View className="items-center py-4">
-              <Text className="text-textMuted text-sm">
+            <View style={{ alignItems: 'center', paddingVertical: 16 }}>
+              <Text style={{ color: '#9090a8', fontSize: 13 }}>
                 Nenhum treino registrado{periodo === 'dia' ? ' hoje' : periodo === 'semana' ? ' esta semana' : ' este mês'}.
               </Text>
             </View>

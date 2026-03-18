@@ -545,89 +545,140 @@ export default function TreinosScreen() {
         </View>
       ) : (
         <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}>
-          {/* Agrupa treinos por aluno */}
+          {/* Agrupa e ordena treinos por aluno */}
           {(() => {
+            const TIPO_ORDEM: Record<string, number> = { A: 0, B: 1, C: 2, D: 3, 'Full Body': 4, Cardio: 5 };
             const grupos: Record<string, { aluno: Treino['aluno']; treinos: Treino[] }> = {};
             for (const t of treinos) {
               const id = t.aluno?._id || 'sem-aluno';
               if (!grupos[id]) grupos[id] = { aluno: t.aluno, treinos: [] };
               grupos[id].treinos.push(t);
             }
-            return Object.entries(grupos).map(([alunoId, grupo]) => (
-              <View key={alunoId} className="mb-5">
-                {/* Header do aluno */}
-                <View className="flex-row items-center gap-2 mb-3">
-                  <View className="w-7 h-7 rounded-full bg-primary/20 items-center justify-center">
-                    <Text className="text-primary text-xs font-bold">
-                      {(grupo.aluno?.nome || grupo.aluno?.email || '?')[0].toUpperCase()}
-                    </Text>
-                  </View>
-                  <Text className="text-textSecondary text-sm font-semibold">
-                    {grupo.aluno?.nome || grupo.aluno?.email || 'Sem aluno'}
-                  </Text>
-                  <View className="flex-1 h-px bg-border ml-2" />
-                  <Text className="text-textMuted text-xs">{grupo.treinos.length} treino(s)</Text>
-                </View>
+            // Ordenar alunos alfabeticamente
+            const gruposOrdenados = Object.entries(grupos).sort(([, a], [, b]) => {
+              const nomeA = (a.aluno?.nome || a.aluno?.email || 'Sem aluno').toLowerCase();
+              const nomeB = (b.aluno?.nome || b.aluno?.email || 'Sem aluno').toLowerCase();
+              return nomeA.localeCompare(nomeB);
+            });
 
-                {grupo.treinos.map((treino) => (
-                  <TouchableOpacity
-                    key={treino._id}
-                    className="bg-surface border border-border rounded-2xl p-4 mb-2"
-                    onPress={() => abrirEdit(treino)}
-                    onLongPress={() =>
-                      Alert.alert('Remover treino?', treino.nome, [
-                        { text: 'Cancelar', style: 'cancel' },
-                        { text: 'Remover', style: 'destructive', onPress: () => deletarMutation.mutate(treino._id) },
-                      ])
-                    }
-                  >
-                    <View className="flex-row items-start justify-between mb-2">
-                      <View className="flex-1">
-                        <View className="flex-row items-center gap-2 mb-1">
-                          <View className="bg-primary/20 px-2 py-0.5 rounded-md">
-                            <Text className="text-primary text-xs font-bold">Treino {treino.tipo}</Text>
+            const TIPO_COR: Record<string, { bg: string; text: string; border: string }> = {
+              A: { bg: 'rgba(108,99,255,0.15)', text: '#6C63FF', border: 'rgba(108,99,255,0.4)' },
+              B: { bg: 'rgba(56,189,248,0.15)', text: '#38bdf8', border: 'rgba(56,189,248,0.4)' },
+              C: { bg: 'rgba(52,211,153,0.15)', text: '#34d399', border: 'rgba(52,211,153,0.4)' },
+              D: { bg: 'rgba(251,191,36,0.15)', text: '#fbbf24', border: 'rgba(251,191,36,0.4)' },
+              'Full Body': { bg: 'rgba(167,139,250,0.15)', text: '#a78bfa', border: 'rgba(167,139,250,0.4)' },
+              Cardio: { bg: 'rgba(248,113,113,0.15)', text: '#f87171', border: 'rgba(248,113,113,0.4)' },
+            };
+            const DEFAULT_COR = { bg: 'rgba(144,144,168,0.15)', text: '#9090a8', border: 'rgba(144,144,168,0.4)' };
+
+            const DIAS_ABREV: Record<string, string> = { seg: 'S', ter: 'T', qua: 'Q', qui: 'Q', sex: 'S', sab: 'S', dom: 'D' };
+            const DIAS_FULL: Record<string, string> = { seg: 'Seg', ter: 'Ter', qua: 'Qua', qui: 'Qui', sex: 'Sex', sab: 'Sáb', dom: 'Dom' };
+
+            return gruposOrdenados.map(([alunoId, grupo]) => {
+              const treinosOrdenados = [...grupo.treinos].sort((a, b) => {
+                const oa = TIPO_ORDEM[a.tipo] ?? 99;
+                const ob = TIPO_ORDEM[b.tipo] ?? 99;
+                return oa !== ob ? oa - ob : a.tipo.localeCompare(b.tipo);
+              });
+              return (
+                <View key={alunoId} className="mb-6">
+                  {/* Header do aluno */}
+                  <View className="flex-row items-center gap-2.5 mb-3">
+                    <View className="w-8 h-8 rounded-full bg-primary/20 items-center justify-center">
+                      <Text className="text-primary text-sm font-bold">
+                        {(grupo.aluno?.nome || grupo.aluno?.email || '?')[0].toUpperCase()}
+                      </Text>
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-textPrimary text-sm font-bold">
+                        {grupo.aluno?.nome || grupo.aluno?.email || 'Sem aluno'}
+                      </Text>
+                    </View>
+                    <View style={{ backgroundColor: 'rgba(108,99,255,0.1)', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 }}>
+                      <Text style={{ color: '#6C63FF', fontSize: 11, fontWeight: '600' }}>{treinosOrdenados.length} treino{treinosOrdenados.length !== 1 ? 's' : ''}</Text>
+                    </View>
+                  </View>
+
+                  {treinosOrdenados.map((treino) => {
+                    const cor = TIPO_COR[treino.tipo] || DEFAULT_COR;
+                    return (
+                      <TouchableOpacity
+                        key={treino._id}
+                        className="bg-surface border border-border rounded-2xl mb-2 overflow-hidden"
+                        onPress={() => abrirEdit(treino)}
+                        activeOpacity={0.85}
+                      >
+                        {/* Faixa lateral colorida por tipo */}
+                        <View className="flex-row">
+                          <View style={{ width: 4, backgroundColor: cor.text }} />
+                          <View className="flex-1 p-4">
+                            {/* Linha superior: tipo badge + ações */}
+                            <View className="flex-row items-center justify-between mb-2">
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                <View style={{ backgroundColor: cor.bg, borderWidth: 1, borderColor: cor.border, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3 }}>
+                                  <Text style={{ color: cor.text, fontSize: 12, fontWeight: '700' }}>Treino {treino.tipo}</Text>
+                                </View>
+                              </View>
+                              <View className="flex-row gap-2">
+                                <View className="bg-background border border-border rounded-lg p-1.5">
+                                  <Ionicons name="create-outline" size={16} color="#6C63FF" />
+                                </View>
+                                <TouchableOpacity
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    Alert.alert(
+                                      'Remover treino?',
+                                      `"${treino.nome}" será removido permanentemente.`,
+                                      [
+                                        { text: 'Cancelar', style: 'cancel' },
+                                        { text: 'Remover', style: 'destructive', onPress: () => deletarMutation.mutate(treino._id) },
+                                      ]
+                                    );
+                                  }}
+                                  className="bg-error/10 border border-error/30 rounded-lg p-1.5"
+                                >
+                                  <Ionicons name="trash-outline" size={16} color="#f87171" />
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+
+                            {/* Nome do treino */}
+                            <Text className="text-textPrimary font-bold text-base mb-2">{treino.nome}</Text>
+
+                            {/* Rodapé: exercícios + dias chips */}
+                            <View className="flex-row items-center gap-3 flex-wrap">
+                              <View className="flex-row items-center gap-1">
+                                <Ionicons name="barbell-outline" size={13} color="#9090a8" />
+                                <Text className="text-textMuted text-xs">{treino.exercicios.length} exercícios</Text>
+                              </View>
+                              {treino.diasSemana?.length > 0 && (
+                                <View className="flex-row gap-1">
+                                  {['seg','ter','qua','qui','sex','sab','dom'].map((d) => {
+                                    const ativo = treino.diasSemana.includes(d);
+                                    return (
+                                      <View key={d} style={{
+                                        width: 26, height: 22, borderRadius: 6, alignItems: 'center', justifyContent: 'center',
+                                        backgroundColor: ativo ? cor.bg : 'transparent',
+                                        borderWidth: 1,
+                                        borderColor: ativo ? cor.border : '#2e2e40',
+                                      }}>
+                                        <Text style={{ fontSize: 9, fontWeight: '700', color: ativo ? cor.text : '#4a4a60' }}>
+                                          {DIAS_FULL[d]?.charAt(0)}
+                                        </Text>
+                                      </View>
+                                    );
+                                  })}
+                                </View>
+                              )}
+                            </View>
                           </View>
                         </View>
-                        <Text className="text-textPrimary font-bold text-base">{treino.nome}</Text>
-                      </View>
-                      <View className="flex-row gap-2">
-                        <View className="bg-surface border border-border rounded-lg p-1.5">
-                          <Ionicons name="create-outline" size={16} color="#6C63FF" />
-                        </View>
-                        <TouchableOpacity
-                          onPress={(e) => {
-                            e.stopPropagation();
-                            Alert.alert(
-                              'Remover treino?',
-                              `"${treino.nome}" será removido permanentemente.`,
-                              [
-                                { text: 'Cancelar', style: 'cancel' },
-                                { text: 'Remover', style: 'destructive', onPress: () => deletarMutation.mutate(treino._id) },
-                              ]
-                            );
-                          }}
-                          className="bg-error/10 border border-error/30 rounded-lg p-1.5"
-                        >
-                          <Ionicons name="trash-outline" size={16} color="#f87171" />
-                        </TouchableOpacity>
-                      </View>
-                    </View>
-                    <View className="flex-row gap-4 pt-2 border-t border-border">
-                      <View className="flex-row items-center gap-1">
-                        <Ionicons name="list-outline" size={13} color="#9090a8" />
-                        <Text className="text-textMuted text-xs">{treino.exercicios.length} exercícios</Text>
-                      </View>
-                      {treino.diasSemana?.length > 0 && (
-                        <View className="flex-row items-center gap-1">
-                          <Ionicons name="calendar-outline" size={13} color="#9090a8" />
-                          <Text className="text-textMuted text-xs">{treino.diasSemana.join(', ')}</Text>
-                        </View>
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ));
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              );
+            });
           })()}
         </ScrollView>
       )}

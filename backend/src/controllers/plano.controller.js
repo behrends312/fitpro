@@ -21,7 +21,7 @@ async function listar(req, res, next) {
 // POST /planos — criar plano com treinos template
 async function criar(req, res, next) {
   try {
-    const { nome, descricao, nivel, treinos, duracaoMeses } = req.body;
+    const { nome, descricao, nivel, treinos, duracaoMeses, dataInicio } = req.body;
     // treinos: [{ tipo, nome, diasSemana, exercicios }]
 
     if (!treinos || !treinos.length) {
@@ -33,6 +33,7 @@ async function criar(req, res, next) {
       descricao: descricao || '',
       nivel: nivel || 'iniciante',
       duracaoMeses: duracaoMeses ?? null,
+      dataInicio: dataInicio ? new Date(dataInicio) : null,
       personal: req.user.id,
     });
 
@@ -88,11 +89,12 @@ async function editar(req, res, next) {
     const plano = await PlanoTreino.findOne({ _id: req.params.id, personal: req.user.id });
     if (!plano) return res.status(404).json({ message: 'Plano não encontrado.' });
 
-    const { nome, descricao, nivel, duracaoMeses } = req.body;
+    const { nome, descricao, nivel, duracaoMeses, dataInicio } = req.body;
     if (nome !== undefined) plano.nome = nome;
     if (descricao !== undefined) plano.descricao = descricao;
     if (nivel !== undefined) plano.nivel = nivel;
     if (duracaoMeses !== undefined) plano.duracaoMeses = duracaoMeses;
+    if (dataInicio !== undefined) plano.dataInicio = dataInicio ? new Date(dataInicio) : null;
 
     await plano.save();
     res.json(plano);
@@ -153,6 +155,8 @@ async function atribuir(req, res, next) {
           aluno: alunoId,
           plano: plano._id,
           isTemplate: false,
+          dataInicio: plano.dataInicio || new Date(),
+          duracaoMeses: plano.duracaoMeses ?? null,
         });
       })
     );

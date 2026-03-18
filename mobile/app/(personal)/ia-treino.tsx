@@ -1,17 +1,18 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  ActivityIndicator, Alert, Modal,
+  ActivityIndicator, Alert, Modal, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '../../src/services/api';
 
-const OBJETIVOS = ['Perder gordura', 'Ganhar massa', 'Condicionamento', 'Força', 'Definição', 'Reabilitação'];
-const NIVEIS = ['iniciante', 'intermediário', 'avançado'];
-const EQUIPAMENTOS = ['barra', 'halteres', 'máquina', 'cabo', 'peso corporal', 'elástico', 'kettlebell'];
-const DIAS_OPTIONS = [2, 3, 4, 5, 6];
+interface Mensagem {
+  id: string;
+  role: 'user' | 'model';
+  content: string;
+}
 
 interface ExercicioGerado {
   nome: string;
@@ -33,185 +34,106 @@ interface PlanoGerado {
   treinos: TreinoGerado[];
 }
 
+const SUGESTOES = [
+  'Crie um treino avançado dividido em A, B, C, D onde A é peito e tríceps, B é costas e bíceps, C é pernas e D é ombros e abdômen',
+  'Monte um treino para iniciante 3x por semana focado em emagrecimento, usando apenas peso corporal e halteres',
+  'Crie um plano intermediário de hipertrofia para 4 dias na semana com divisão push/pull/legs',
+];
+
+function extractPlan(text: string): PlanoGerado | null {
+  const match = text.match(/```json\n?([\s\S]*?)\n?```/);
+  if (!match) return null;
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return null;
+  }
+}
+
+function stripJson(text: string): string {
+  return text.replace(/```json\n?[\s\S]*?\n?```/g, '').trim();
+}
+
+const TIPO_COR: Record<string, string> = {
+  A: '#6C63FF', B: '#38bdf8', C: '#34d399', D: '#fbbf24',
+  E: '#f87171', 'Full Body': '#a78bfa', Cardio: '#fb923c',
+};
+
 export default function IATreinoScreen() {
-  const [step, setStep] = useState<'form' | 'resultado'>('form');
+  const [mensagens, setMensagens] = useState<Mensagem[]>([]);
+  const [input, setInput] = useState('');
+  const [planoPendente, setPlanoPendente] = useState<PlanoGerado | null>(null);
   const [alunoId, setAlunoId] = useState('');
-  const [altura, setAltura] = useState('');
-  const [peso, setPeso] = useState('');
-  const [objetivo, setObjetivo] = useState('');
-  const [diasTreino, setDiasTreino] = useState(4);
-  const [nivel, setNivel] = useState('intermediário');
-  const [equipamentos, setEquipamentos] = useState<string[]>(['barra', 'halteres', 'máquina', 'cabo']);
-  const [plano, setPlano] = useState<PlanoGerado | null>(null);
-  const [modalAluno, setModalAluno] = useState(false);
   const [alunoNome, setAlunoNome] = useState('');
+  const [modalAluno, setModalAluno] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
 
   const { data: alunos = [] } = useQuery<any[]>({
     queryKey: ['meus-alunos'],
     queryFn: () => api.get('/users/alunos').then((r) => r.data),
   });
 
-  const gerarMutation = useMutation({
-    mutationFn: (salvar: boolean) =>
-      api.post('/ia/gerar-treino', {
-        alunoId: alunoId || undefined,
-        altura: parseFloat(altura),
-        peso: parseFloat(peso),
-        objetivo,
-        diasTreino,
-        nivel,
-        equipamentos,
-        salvar,
-      }).then((r) => r.data),
-    onSuccess: (data) => {
-      setPlano(data);
-      setStep('resultado');
+  const chatMutation = useMutation({
+    mutationFn: (msgs: Mensagem[]) =>
+      api.post('/ia/chat', {
+        mensagens: msgs.map((m) => ({ role: m.role, content: m.content })),
+        contexto: 'personal',
+      }).then((r) => r.data.resposta as string),
+    onSuccess: (resposta) => {
+      const nova: Mensagem = {
+        id: Date.now().toString(),
+        role: 'model',
+        content: resposta,
+      };
+      setMensagens((prev) => [...prev, nova]);
+
+      const plano = extractPlan(resposta);
+      if (plano) setPlanoPendente(plano);
+
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     },
-    onError: (err: any) => Alert.alert('Erro', err?.response?.data?.message || 'Falha ao gerar treino. Verifique a chave da IA.'),
+    onError: (err: any) =>
+      Alert.alert('Erro', err?.response?.data?.message || 'Falha ao comunicar com a IA.'),
   });
 
   const salvarMutation = useMutation({
     mutationFn: () =>
-      api.post('/ia/gerar-treino', {
-        alunoId: alunoId || undefined,
-        altura: parseFloat(altura),
-        peso: parseFloat(peso),
-        objetivo,
-        diasTreino,
-        nivel,
-        equipamentos,
-        salvar: true,
-      }).then((r) => r.data),
-    onSuccess: () => Alert.alert('Salvo!', 'O plano de treino foi salvo com sucesso para o aluno.', [{ text: 'OK', onPress: () => { setStep('form'); setPlano(null); } }]),
-    onError: (err: any) => Alert.alert('Erro', err?.response?.data?.message || 'Falha ao salvar.'),
+      api.post('/ia/salvar-plano', { planoJson: planoPendente, alunoId }).then((r) => r.data),
+    onSuccess: (data) => {
+      Alert.alert('Salvo!', data.message);
+      setPlanoPendente(null);
+      setAlunoId('');
+      setAlunoNome('');
+    },
+    onError: (err: any) =>
+      Alert.alert('Erro', err?.response?.data?.message || 'Falha ao salvar.'),
   });
 
-  function toggleEquipamento(eq: string) {
-    setEquipamentos((prev) =>
-      prev.includes(eq) ? prev.filter((e) => e !== eq) : [...prev, eq]
-    );
-  }
+  const enviar = useCallback((texto?: string) => {
+    const conteudo = (texto ?? input).trim();
+    if (!conteudo) return;
 
-  function validar() {
-    if (!altura || !peso || !objetivo) {
-      Alert.alert('Campos obrigatórios', 'Preencha altura, peso e objetivo.');
-      return false;
-    }
-    return true;
-  }
+    const nova: Mensagem = { id: Date.now().toString(), role: 'user', content: conteudo };
+    const novaLista = [...mensagens, nova];
+    setMensagens(novaLista);
+    setInput('');
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    chatMutation.mutate(novaLista);
+  }, [input, mensagens]);
 
-  if (step === 'resultado' && plano) {
-    return (
-      <SafeAreaView className="flex-1 bg-background">
-        <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 40 }}>
-          {/* Header */}
-          <View className="px-5 pt-4 pb-2 flex-row items-center gap-3">
-            <TouchableOpacity onPress={() => setStep('form')}>
-              <Ionicons name="arrow-back" size={24} color="#9090a8" />
-            </TouchableOpacity>
-            <View className="flex-1">
-              <Text className="text-textPrimary text-xl font-bold">{plano.plano.nome}</Text>
-              <Text className="text-textSecondary text-xs">{plano.treinos.length} treinos gerados</Text>
-            </View>
-          </View>
-
-          {/* Info do plano */}
-          <View className="mx-5 mb-4 bg-primary/10 border border-primary/20 rounded-2xl p-4">
-            <Text className="text-textPrimary text-sm font-semibold mb-1">Sobre o plano</Text>
-            <Text className="text-textSecondary text-sm mb-3">{plano.plano.descricao}</Text>
-            <View className="border-t border-primary/20 pt-3 mb-2">
-              <Text className="text-primary text-xs font-semibold mb-1">PERIODIZAÇÃO</Text>
-              <Text className="text-textSecondary text-xs">{plano.plano.periodizacao}</Text>
-            </View>
-            <View className="border-t border-primary/20 pt-3">
-              <Text className="text-primary text-xs font-semibold mb-1">PROGRESSÃO</Text>
-              <Text className="text-textSecondary text-xs">{plano.plano.progressao}</Text>
-            </View>
-          </View>
-
-          {/* Treinos */}
-          {plano.treinos.map((treino, tIdx) => (
-            <View key={tIdx} className="mx-5 mb-4 bg-surface border border-border rounded-2xl overflow-hidden">
-              <View className="bg-primary/5 px-4 py-3 flex-row items-center justify-between">
-                <View>
-                  <Text className="text-textPrimary font-bold text-base">{treino.nome}</Text>
-                  <Text className="text-textMuted text-xs mt-0.5">{treino.diasSemana.join(' · ')}</Text>
-                </View>
-                <View className="bg-primary/20 px-3 py-1 rounded-lg">
-                  <Text className="text-primary text-xs font-bold">Treino {treino.tipo}</Text>
-                </View>
-              </View>
-
-              {treino.exercicios.map((ex, eIdx) => (
-                <View key={eIdx} className={`px-4 py-3 ${eIdx < treino.exercicios.length - 1 ? 'border-b border-border' : ''}`}>
-                  <Text className="text-textPrimary font-semibold text-sm">{ex.nome}</Text>
-                  {ex.musculosPrincipais?.length > 0 && (
-                    <Text className="text-textMuted text-xs mb-2">{ex.musculosPrincipais.join(' · ')}</Text>
-                  )}
-                  <View className="flex-row gap-3">
-                    <View className="bg-background rounded-lg px-3 py-1.5">
-                      <Text className="text-textSecondary text-xs">{ex.series} séries</Text>
-                    </View>
-                    <View className="bg-background rounded-lg px-3 py-1.5">
-                      <Text className="text-textSecondary text-xs">{ex.reps} reps</Text>
-                    </View>
-                    <View className="bg-background rounded-lg px-3 py-1.5">
-                      <Text className="text-textSecondary text-xs">{ex.carga}kg</Text>
-                    </View>
-                    <View className="bg-background rounded-lg px-3 py-1.5">
-                      <Text className="text-textSecondary text-xs">{ex.descanso}s</Text>
-                    </View>
-                  </View>
-                  {ex.observacoes ? (
-                    <Text className="text-textMuted text-xs mt-2 italic">{ex.observacoes}</Text>
-                  ) : null}
-                </View>
-              ))}
-            </View>
-          ))}
-
-          {/* Botões */}
-          <View className="px-5 gap-3">
-            {alunoId ? (
-              <TouchableOpacity
-                onPress={() => salvarMutation.mutate()}
-                disabled={salvarMutation.isPending}
-                className="bg-primary rounded-xl py-4 items-center"
-              >
-                {salvarMutation.isPending ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <View className="flex-row items-center gap-2">
-                    <Ionicons name="save-outline" size={20} color="white" />
-                    <Text className="text-white font-bold text-base">Salvar para o aluno</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            ) : (
-              <View className="bg-surface border border-border rounded-xl py-3 px-4">
-                <Text className="text-textSecondary text-sm text-center">Selecione um aluno para salvar o treino</Text>
-              </View>
-            )}
-            <TouchableOpacity
-              onPress={() => { setStep('form'); setPlano(null); }}
-              className="border border-border rounded-xl py-3 items-center"
-            >
-              <Text className="text-textSecondary font-semibold">Gerar novo plano</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
+  const limpar = () => {
+    setMensagens([]);
+    setPlanoPendente(null);
+  };
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      {/* Modal seleção de aluno */}
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#13131f' }}>
+      {/* Modal aluno */}
       <Modal visible={modalAluno} transparent animationType="slide" onRequestClose={() => setModalAluno(false)}>
-        <View className="flex-1 bg-black/70 justify-end">
-          <View className="bg-surface rounded-t-3xl px-6 pt-6 pb-10">
-            <View className="flex-row justify-between items-center mb-4">
-              <Text className="text-textPrimary text-xl font-bold">Selecionar Aluno</Text>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' }}>
+          <View style={{ backgroundColor: '#1e1e2e', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 24, paddingTop: 24, paddingBottom: 40 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>Selecionar Aluno</Text>
               <TouchableOpacity onPress={() => setModalAluno(false)}>
                 <Ionicons name="close" size={24} color="#9090a8" />
               </TouchableOpacity>
@@ -220,22 +142,15 @@ export default function IATreinoScreen() {
               {alunos.map((a) => (
                 <TouchableOpacity
                   key={a._id}
-                  onPress={() => {
-                    setAlunoId(a._id);
-                    setAlunoNome(a.nome || a.email);
-                    if (a.peso) setPeso(String(a.peso));
-                    if (a.altura) setAltura(String(a.altura));
-                    if (a.objetivo) setObjetivo(a.objetivo);
-                    setModalAluno(false);
-                  }}
-                  className="flex-row items-center py-3 border-b border-border"
+                  onPress={() => { setAlunoId(a._id); setAlunoNome(a.nome || a.email); setModalAluno(false); }}
+                  style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#2e2e40' }}
                 >
-                  <View className="w-10 h-10 rounded-xl bg-primary/20 items-center justify-center mr-3">
-                    <Text className="text-primary font-bold">{(a.nome || a.email)[0].toUpperCase()}</Text>
+                  <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: 'rgba(108,99,255,0.2)', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                    <Text style={{ color: '#6C63FF', fontWeight: '700' }}>{(a.nome || a.email)[0].toUpperCase()}</Text>
                   </View>
                   <View>
-                    <Text className="text-textPrimary font-semibold">{a.nome || 'Sem nome'}</Text>
-                    <Text className="text-textMuted text-xs">{a.email}</Text>
+                    <Text style={{ color: '#fff', fontWeight: '600' }}>{a.nome || 'Sem nome'}</Text>
+                    <Text style={{ color: '#9090a8', fontSize: 12 }}>{a.email}</Text>
                   </View>
                 </TouchableOpacity>
               ))}
@@ -244,121 +159,171 @@ export default function IATreinoScreen() {
         </View>
       </Modal>
 
-      <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-        {/* Header */}
-        <View className="px-5 pt-4 pb-6">
-          <View className="flex-row items-center gap-2 mb-1">
-            <Ionicons name="sparkles" size={24} color="#6C63FF" />
-            <Text className="text-textPrimary text-2xl font-bold">IA de Treinos</Text>
-          </View>
-          <Text className="text-textSecondary text-sm">Gere um plano completo com progressão e periodização</Text>
+      {/* Header */}
+      <View style={{ paddingHorizontal: 20, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#2e2e40' }}>
+        <Ionicons name="sparkles" size={22} color="#6C63FF" />
+        <View style={{ flex: 1, marginLeft: 10 }}>
+          <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>IA de Treinos</Text>
+          <Text style={{ color: '#9090a8', fontSize: 12 }}>Descreva o treino que deseja criar</Text>
         </View>
-
-        <View className="px-5">
-          {/* Aluno */}
-          <Text className="text-textSecondary text-xs font-semibold mb-2 uppercase tracking-widest">Aluno (opcional)</Text>
-          <TouchableOpacity
-            onPress={() => setModalAluno(true)}
-            className="bg-surface border border-border rounded-xl px-4 py-3.5 flex-row items-center justify-between mb-5"
-          >
-            <Text className={alunoNome ? 'text-textPrimary text-base' : 'text-[#5a5a70] text-base'}>
-              {alunoNome || 'Selecionar aluno...'}
-            </Text>
-            <Ionicons name="chevron-down" size={18} color="#9090a8" />
+        {mensagens.length > 0 && (
+          <TouchableOpacity onPress={limpar} style={{ padding: 6 }}>
+            <Ionicons name="trash-outline" size={20} color="#9090a8" />
           </TouchableOpacity>
+        )}
+      </View>
 
-          {/* Altura e Peso */}
-          <View className="flex-row gap-3 mb-4">
-            <View className="flex-1">
-              <Text className="text-textSecondary text-xs font-semibold mb-2 uppercase tracking-widest">Altura (cm)</Text>
-              <View className="bg-surface border border-border rounded-xl px-4">
-                <TextInput className="text-textPrimary py-3.5 text-base" value={altura} onChangeText={setAltura} placeholder="175" placeholderTextColor="#5a5a70" keyboardType="numeric" />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
+        {/* Chat area */}
+        <ScrollView
+          ref={scrollRef}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 8 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {mensagens.length === 0 ? (
+            <View style={{ alignItems: 'center', paddingTop: 40 }}>
+              <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: 'rgba(108,99,255,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
+                <Ionicons name="sparkles" size={34} color="#6C63FF" />
+              </View>
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700', marginBottom: 8, textAlign: 'center' }}>Olá, personal!</Text>
+              <Text style={{ color: '#9090a8', fontSize: 14, textAlign: 'center', lineHeight: 22, marginBottom: 32 }}>
+                Descreva o treino que você quer criar. Posso montar planos completos com divisão, exercícios e cargas.
+              </Text>
+              {SUGESTOES.map((s, i) => (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => enviar(s)}
+                  style={{ backgroundColor: '#1e1e2e', borderWidth: 1, borderColor: '#2e2e40', borderRadius: 14, padding: 14, marginBottom: 10, width: '100%' }}
+                >
+                  <Text style={{ color: '#c0c0d8', fontSize: 13, lineHeight: 20 }}>{s}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            mensagens.map((msg) => {
+              const plano = msg.role === 'model' ? extractPlan(msg.content) : null;
+              const texto = msg.role === 'model' ? stripJson(msg.content) : msg.content;
+              return (
+                <View key={msg.id} style={{ marginBottom: 16, alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                  {/* Bubble de texto */}
+                  {texto.length > 0 && (
+                    <View style={{
+                      maxWidth: '85%',
+                      backgroundColor: msg.role === 'user' ? '#6C63FF' : '#1e1e2e',
+                      borderRadius: 18,
+                      borderBottomRightRadius: msg.role === 'user' ? 4 : 18,
+                      borderBottomLeftRadius: msg.role === 'model' ? 4 : 18,
+                      paddingHorizontal: 16,
+                      paddingVertical: 12,
+                      borderWidth: msg.role === 'model' ? 1 : 0,
+                      borderColor: '#2e2e40',
+                    }}>
+                      <Text style={{ color: '#fff', fontSize: 14, lineHeight: 22 }}>{texto}</Text>
+                    </View>
+                  )}
+
+                  {/* Preview do plano gerado */}
+                  {plano && (
+                    <View style={{ width: '100%', marginTop: 10, backgroundColor: '#1e1e2e', borderRadius: 18, borderWidth: 1, borderColor: 'rgba(108,99,255,0.3)', overflow: 'hidden' }}>
+                      <View style={{ backgroundColor: 'rgba(108,99,255,0.1)', paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Ionicons name="clipboard-outline" size={18} color="#6C63FF" />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{plano.plano.nome}</Text>
+                          <Text style={{ color: '#9090a8', fontSize: 12, marginTop: 2 }}>{plano.treinos.length} treinos gerados</Text>
+                        </View>
+                      </View>
+
+                      {plano.treinos.map((t, i) => {
+                        const cor = TIPO_COR[t.tipo] || '#6C63FF';
+                        return (
+                          <View key={i} style={{ paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#2e2e40', flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                            <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: `${cor}22`, alignItems: 'center', justifyContent: 'center' }}>
+                              <Text style={{ color: cor, fontWeight: '700', fontSize: 14 }}>{t.tipo}</Text>
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ color: '#e0e0f0', fontWeight: '600', fontSize: 13 }}>{t.nome}</Text>
+                              <Text style={{ color: '#9090a8', fontSize: 12 }}>{t.exercicios.length} exercícios · {t.diasSemana.join(', ')}</Text>
+                            </View>
+                          </View>
+                        );
+                      })}
+
+                      {/* Salvar */}
+                      <View style={{ padding: 14, borderTopWidth: 1, borderTopColor: '#2e2e40', gap: 10 }}>
+                        <TouchableOpacity
+                          onPress={() => setModalAluno(true)}
+                          style={{ backgroundColor: '#1a1a2e', borderWidth: 1, borderColor: '#2e2e40', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
+                        >
+                          <Text style={{ color: alunoNome ? '#fff' : '#5a5a70', fontSize: 14 }}>
+                            {alunoNome || 'Selecionar aluno para salvar...'}
+                          </Text>
+                          <Ionicons name="chevron-down" size={16} color="#9090a8" />
+                        </TouchableOpacity>
+                        {alunoId ? (
+                          <TouchableOpacity
+                            onPress={() => { setPlanoPendente(plano); salvarMutation.mutate(); }}
+                            disabled={salvarMutation.isPending}
+                            style={{ backgroundColor: '#6C63FF', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}
+                          >
+                            {salvarMutation.isPending ? (
+                              <ActivityIndicator color="white" />
+                            ) : (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                <Ionicons name="save-outline" size={18} color="white" />
+                                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Salvar para {alunoNome}</Text>
+                              </View>
+                            )}
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    </View>
+                  )}
+                </View>
+              );
+            })
+          )}
+
+          {chatMutation.isPending && (
+            <View style={{ alignItems: 'flex-start', marginBottom: 16 }}>
+              <View style={{ backgroundColor: '#1e1e2e', borderRadius: 18, borderBottomLeftRadius: 4, paddingHorizontal: 20, paddingVertical: 14, borderWidth: 1, borderColor: '#2e2e40', flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                <ActivityIndicator size="small" color="#6C63FF" />
+                <Text style={{ color: '#9090a8', fontSize: 14 }}>Gerando...</Text>
               </View>
             </View>
-            <View className="flex-1">
-              <Text className="text-textSecondary text-xs font-semibold mb-2 uppercase tracking-widest">Peso (kg)</Text>
-              <View className="bg-surface border border-border rounded-xl px-4">
-                <TextInput className="text-textPrimary py-3.5 text-base" value={peso} onChangeText={setPeso} placeholder="80" placeholderTextColor="#5a5a70" keyboardType="numeric" />
-              </View>
-            </View>
-          </View>
+          )}
+        </ScrollView>
 
-          {/* Objetivo */}
-          <Text className="text-textSecondary text-xs font-semibold mb-2 uppercase tracking-widest">Objetivo</Text>
-          <View className="flex-row flex-wrap gap-2 mb-5">
-            {OBJETIVOS.map((obj) => (
-              <TouchableOpacity
-                key={obj}
-                onPress={() => setObjetivo(obj)}
-                className={`px-4 py-2 rounded-xl border ${objetivo === obj ? 'bg-primary border-primary' : 'bg-surface border-border'}`}
-              >
-                <Text className={`text-sm font-semibold ${objetivo === obj ? 'text-white' : 'text-textSecondary'}`}>{obj}</Text>
-              </TouchableOpacity>
-            ))}
+        {/* Input */}
+        <View style={{ paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#2e2e40', flexDirection: 'row', alignItems: 'flex-end', gap: 10 }}>
+          <View style={{ flex: 1, backgroundColor: '#1e1e2e', borderRadius: 20, borderWidth: 1, borderColor: '#2e2e40', paddingHorizontal: 16, paddingVertical: 10, minHeight: 44, maxHeight: 120 }}>
+            <TextInput
+              value={input}
+              onChangeText={setInput}
+              placeholder="Descreva o treino que precisa..."
+              placeholderTextColor="#5a5a70"
+              multiline
+              style={{ color: '#fff', fontSize: 14, lineHeight: 20 }}
+              onSubmitEditing={() => enviar()}
+              blurOnSubmit={false}
+            />
           </View>
-
-          {/* Dias de treino */}
-          <Text className="text-textSecondary text-xs font-semibold mb-2 uppercase tracking-widest">Dias de treino por semana</Text>
-          <View className="flex-row gap-2 mb-5">
-            {DIAS_OPTIONS.map((d) => (
-              <TouchableOpacity
-                key={d}
-                onPress={() => setDiasTreino(d)}
-                className={`w-12 h-12 rounded-xl items-center justify-center border ${diasTreino === d ? 'bg-primary border-primary' : 'bg-surface border-border'}`}
-              >
-                <Text className={`font-bold text-base ${diasTreino === d ? 'text-white' : 'text-textSecondary'}`}>{d}x</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Nível */}
-          <Text className="text-textSecondary text-xs font-semibold mb-2 uppercase tracking-widest">Nível</Text>
-          <View className="flex-row gap-2 mb-5">
-            {NIVEIS.map((n) => (
-              <TouchableOpacity
-                key={n}
-                onPress={() => setNivel(n)}
-                className={`flex-1 py-2.5 rounded-xl items-center border ${nivel === n ? 'bg-primary border-primary' : 'bg-surface border-border'}`}
-              >
-                <Text className={`text-sm font-semibold capitalize ${nivel === n ? 'text-white' : 'text-textSecondary'}`}>{n}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Equipamentos */}
-          <Text className="text-textSecondary text-xs font-semibold mb-2 uppercase tracking-widest">Equipamentos disponíveis</Text>
-          <View className="flex-row flex-wrap gap-2 mb-8">
-            {EQUIPAMENTOS.map((eq) => (
-              <TouchableOpacity
-                key={eq}
-                onPress={() => toggleEquipamento(eq)}
-                className={`px-4 py-2 rounded-xl border ${equipamentos.includes(eq) ? 'bg-primary/10 border-primary/50' : 'bg-surface border-border'}`}
-              >
-                <Text className={`text-sm ${equipamentos.includes(eq) ? 'text-primary font-semibold' : 'text-textSecondary'}`}>{eq}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Botão gerar */}
           <TouchableOpacity
-            onPress={() => validar() && gerarMutation.mutate(false)}
-            disabled={gerarMutation.isPending}
-            className="bg-primary rounded-xl py-4 items-center"
+            onPress={() => enviar()}
+            disabled={!input.trim() || chatMutation.isPending}
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              backgroundColor: input.trim() && !chatMutation.isPending ? '#6C63FF' : '#2e2e40',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
           >
-            {gerarMutation.isPending ? (
-              <View className="flex-row items-center gap-3">
-                <ActivityIndicator color="white" />
-                <Text className="text-white font-bold text-base">Gerando plano com IA...</Text>
-              </View>
-            ) : (
-              <View className="flex-row items-center gap-2">
-                <Ionicons name="sparkles" size={20} color="white" />
-                <Text className="text-white font-bold text-base">Gerar plano de treino</Text>
-              </View>
-            )}
+            <Ionicons name="send" size={18} color={input.trim() && !chatMutation.isPending ? '#fff' : '#5a5a70'} />
           </TouchableOpacity>
         </View>
-      </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

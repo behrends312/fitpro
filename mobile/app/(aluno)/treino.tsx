@@ -37,6 +37,8 @@ interface Treino {
   nome: string;
   tipo: string;
   diasSemana: string[];
+  dataInicio?: string | null;
+  duracaoMeses?: number | null;
   exercicios: Array<{
     _id: string;
     exercicio: { _id: string; nome: string; musculosPrincipais: string[] };
@@ -45,6 +47,15 @@ interface Treino {
     carga: number;
     descanso: number;
   }>;
+}
+
+function calcularExpiracao(treino: Treino): { expirado: boolean; diasRestantes: number | null; dataExp: Date | null } {
+  if (!treino.dataInicio || !treino.duracaoMeses) return { expirado: false, diasRestantes: null, dataExp: null };
+  const exp = new Date(treino.dataInicio);
+  exp.setMonth(exp.getMonth() + treino.duracaoMeses);
+  const agora = new Date();
+  const diff = Math.ceil((exp.getTime() - agora.getTime()) / (1000 * 60 * 60 * 24));
+  return { expirado: diff <= 0, diasRestantes: diff, dataExp: exp };
 }
 
 const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -623,14 +634,20 @@ export default function TreinoScreen() {
               </View>
             ) : (
               treinos.map((treino) => {
-                const hoje = new Date().toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '').slice(0, 3);
+                const hojeStr = new Date().toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '').slice(0, 3);
                 const diasMap: Record<string, string> = { seg: 'seg', ter: 'ter', qua: 'qua', qui: 'qui', sex: 'sex', sab: 'sáb', dom: 'dom' };
-                const ehHoje = treino.diasSemana.some((d) => diasMap[d] === hoje);
+                const ehHoje = treino.diasSemana.some((d) => diasMap[d] === hojeStr);
+                const { expirado, diasRestantes, dataExp } = calcularExpiracao(treino);
+                const expirando = !expirado && diasRestantes !== null && diasRestantes <= 7;
 
                 return (
                   <TouchableOpacity
                     key={treino._id}
                     onPress={() => {
+                      if (expirado) {
+                        Alert.alert('Plano expirado', 'Este plano de treino expirou. Fale com seu personal para renová-lo.');
+                        return;
+                      }
                       Alert.alert(
                         `Iniciar ${treino.nome}?`,
                         `${treino.exercicios.length} exercícios`,
@@ -640,47 +657,68 @@ export default function TreinoScreen() {
                         ]
                       );
                     }}
-                    className="bg-surface border border-border rounded-2xl p-5 mb-4"
+                    style={{ opacity: expirado ? 0.6 : 1 }}
+                    className="bg-surface border border-border rounded-2xl mb-4 overflow-hidden"
                   >
-                    <View className="flex-row justify-between items-start mb-3">
-                      <View>
-                        <View className="flex-row items-center gap-2 mb-1">
-                          <View className="bg-primary/20 px-2 py-0.5 rounded-md">
-                            <Text className="text-primary text-xs font-bold">Treino {treino.tipo}</Text>
-                          </View>
-                          {ehHoje && (
-                            <View className="bg-success/20 px-2 py-0.5 rounded-md">
-                              <Text className="text-success text-xs font-semibold">Hoje</Text>
+                    {/* Banner expirado / expirando */}
+                    {expirado && (
+                      <View style={{ backgroundColor: 'rgba(248,113,113,0.15)', borderBottomWidth: 1, borderBottomColor: 'rgba(248,113,113,0.3)', paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Ionicons name="alert-circle-outline" size={14} color="#f87171" />
+                        <Text style={{ color: '#f87171', fontSize: 12, fontWeight: '600' }}>
+                          Plano expirado em {dataExp?.toLocaleDateString('pt-BR')} — fale com seu personal
+                        </Text>
+                      </View>
+                    )}
+                    {expirando && (
+                      <View style={{ backgroundColor: 'rgba(251,191,36,0.15)', borderBottomWidth: 1, borderBottomColor: 'rgba(251,191,36,0.3)', paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Ionicons name="time-outline" size={14} color="#fbbf24" />
+                        <Text style={{ color: '#fbbf24', fontSize: 12, fontWeight: '600' }}>
+                          Expira em {diasRestantes} dia{diasRestantes !== 1 ? 's' : ''}
+                        </Text>
+                      </View>
+                    )}
+
+                    <View className="p-5">
+                      <View className="flex-row justify-between items-start mb-3">
+                        <View>
+                          <View className="flex-row items-center gap-2 mb-1">
+                            <View className="bg-primary/20 px-2 py-0.5 rounded-md">
+                              <Text className="text-primary text-xs font-bold">Treino {treino.tipo}</Text>
                             </View>
-                          )}
+                            {ehHoje && !expirado && (
+                              <View className="bg-success/20 px-2 py-0.5 rounded-md">
+                                <Text className="text-success text-xs font-semibold">Hoje</Text>
+                              </View>
+                            )}
+                          </View>
+                          <Text className="text-textPrimary text-xl font-bold">{treino.nome}</Text>
                         </View>
-                        <Text className="text-textPrimary text-xl font-bold">{treino.nome}</Text>
+                        <View style={{ backgroundColor: expirado ? 'rgba(248,113,113,0.1)' : 'rgba(108,99,255,0.1)', padding: 12, borderRadius: 12 }}>
+                          <Ionicons name={expirado ? 'lock-closed-outline' : 'play'} size={22} color={expirado ? '#f87171' : '#6C63FF'} />
+                        </View>
                       </View>
-                      <View className="bg-primary/10 p-3 rounded-xl">
-                        <Ionicons name="play" size={22} color="#6C63FF" />
-                      </View>
-                    </View>
 
-                    <View className="mb-3">
-                      {treino.exercicios.slice(0, 3).map((ex, i) => (
-                        <Text key={i} className="text-textMuted text-xs mb-0.5">· {ex.exercicio.nome}</Text>
-                      ))}
-                      {treino.exercicios.length > 3 && (
-                        <Text className="text-textMuted text-xs">+{treino.exercicios.length - 3} mais...</Text>
-                      )}
-                    </View>
-
-                    <View className="flex-row gap-4">
-                      <View className="flex-row items-center gap-1">
-                        <Ionicons name="list-outline" size={14} color="#9090a8" />
-                        <Text className="text-textSecondary text-sm">{treino.exercicios.length} exercícios</Text>
+                      <View className="mb-3">
+                        {treino.exercicios.slice(0, 3).map((ex, i) => (
+                          <Text key={i} className="text-textMuted text-xs mb-0.5">· {ex.exercicio.nome}</Text>
+                        ))}
+                        {treino.exercicios.length > 3 && (
+                          <Text className="text-textMuted text-xs">+{treino.exercicios.length - 3} mais...</Text>
+                        )}
                       </View>
-                      {treino.diasSemana.length > 0 && (
+
+                      <View className="flex-row gap-4">
                         <View className="flex-row items-center gap-1">
-                          <Ionicons name="calendar-outline" size={14} color="#9090a8" />
-                          <Text className="text-textSecondary text-sm">{treino.diasSemana.join(', ')}</Text>
+                          <Ionicons name="list-outline" size={14} color="#9090a8" />
+                          <Text className="text-textSecondary text-sm">{treino.exercicios.length} exercícios</Text>
                         </View>
-                      )}
+                        {treino.diasSemana.length > 0 && (
+                          <View className="flex-row items-center gap-1">
+                            <Ionicons name="calendar-outline" size={14} color="#9090a8" />
+                            <Text className="text-textSecondary text-sm">{treino.diasSemana.join(', ')}</Text>
+                          </View>
+                        )}
+                      </View>
                     </View>
                   </TouchableOpacity>
                 );

@@ -34,6 +34,13 @@ export default function AlunoLayout() {
         }}
       />
       <Tabs.Screen
+        name="ia"
+        options={{
+          title: 'IA',
+          tabBarIcon: ({ color, size }) => <Ionicons name="sparkles-outline" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="perfil"
         options={{
           title: 'Perfil',
