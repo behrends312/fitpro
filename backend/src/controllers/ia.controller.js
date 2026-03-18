@@ -1,39 +1,15 @@
+const Anthropic = require('@anthropic-ai/sdk');
 const Treino = require('../models/Treino');
 const Exercicio = require('../models/Exercicio');
 const User = require('../models/User');
 
-const GEMINI_MODEL = 'gemini-1.5-flash';
-const GEMINI_BASE = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}`;
-
-async function geminiChat(systemInstruction, history, ultimaMensagem) {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) throw new Error('GEMINI_API_KEY não configurada. Obtenha uma chave gratuita em https://aistudio.google.com/apikey');
-
-  const url = `${GEMINI_BASE}:generateContent?key=${key}`;
-  const body = {
-    systemInstruction: { parts: [{ text: systemInstruction }] },
-    contents: [
-      ...history,
-      { role: 'user', parts: [{ text: ultimaMensagem }] },
-    ],
-    generationConfig: { maxOutputTokens: 2048, temperature: 0.7 },
-  };
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    const msg = err?.error?.message || res.statusText;
-    throw new Error(`Gemini ${res.status}: ${msg}`);
-  }
-
-  const data = await res.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+function getClient() {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) throw new Error('ANTHROPIC_API_KEY não configurada.');
+  return new Anthropic({ apiKey: key });
 }
+
+const MODEL = 'claude-haiku-4-5-20251001';
 
 const SYSTEM_PERSONAL = `Você é um assistente especialista em prescrição de treinos para personal trainers. Responda SEMPRE em português brasileiro.
 
@@ -97,15 +73,22 @@ async function chat(req, res, next) {
       return res.status(400).json({ message: 'Mensagens são obrigatórias.' });
     }
 
-    const systemInstruction = contexto === 'aluno' ? SYSTEM_ALUNO : SYSTEM_PERSONAL;
+    const system = contexto === 'aluno' ? SYSTEM_ALUNO : SYSTEM_PERSONAL;
+    const client = getClient();
 
-    const history = mensagens.slice(0, -1).map((m) => ({
-      role: m.role === 'user' ? 'user' : 'model',
-      parts: [{ text: m.content }],
+    const messages = mensagens.map((m) => ({
+      role: m.role === 'user' ? 'user' : 'assistant',
+      content: m.content,
     }));
-    const ultimaMensagem = mensagens[mensagens.length - 1].content;
 
-    const resposta = await geminiChat(systemInstruction, history, ultimaMensagem);
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 2048,
+      system,
+      messages,
+    });
+
+    const resposta = response.content[0]?.type === 'text' ? response.content[0].text : '';
     res.json({ resposta });
   } catch (err) {
     next(err);
@@ -173,7 +156,7 @@ async function salvarPlanoChat(req, res, next) {
   }
 }
 
-// POST /ia/gerar-treino — mantido para retrocompatibilidade (migrado para Gemini)
+// POST /ia/gerar-treino — endpoint legado
 async function gerarTreino(req, res, next) {
   try {
     const { alunoId, altura, peso, objetivo, diasTreino, nivel, equipamentos, salvar } = req.body;
@@ -191,13 +174,19 @@ async function gerarTreino(req, res, next) {
     const equipStr = equipamentos?.length ? equipamentos.join(', ') : 'academia completa';
     const prompt = `Crie um plano de treino completo para:\n- Aluno: ${alunoNome}\n- Altura: ${altura}cm, Peso: ${peso}kg\n- Objetivo: ${objetivo}\n- Dias/semana: ${diasTreino}, Nível: ${nivel || 'intermediário'}\n- Equipamentos: ${equipStr}`;
 
-    const text = await geminiChat(SYSTEM_PERSONAL, [], prompt);
+    const client = getClient();
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 4096,
+      system: SYSTEM_PERSONAL,
+      messages: [{ role: 'user', content: prompt }],
+    });
 
+    const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
     const jsonMatch = text.match(/```json\n?([\s\S]*?)\n?```/) || text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return res.status(500).json({ message: 'IA retornou resposta inválida.' });
 
-    const jsonStr = jsonMatch[1] || jsonMatch[0];
-    const planoGerado = JSON.parse(jsonStr);
+    const planoGerado = JSON.parse(jsonMatch[1] || jsonMatch[0]);
 
     if (salvar && alunoId) {
       const treinosSalvos = [];
