@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput,
-  ActivityIndicator, KeyboardAvoidingView, Platform,
+  ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -38,6 +38,8 @@ export default function AlunoIAScreen() {
       setMensagens((prev) => [...prev, nova]);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     },
+    onError: (err: any) =>
+      Alert.alert('Erro', err?.response?.data?.message || 'Falha ao comunicar com a IA. Tente novamente.'),
   });
 
   const enviar = useCallback((texto?: string) => {
