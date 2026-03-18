@@ -1,13 +1,38 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 const Treino = require('../models/Treino');
 const Exercicio = require('../models/Exercicio');
 const User = require('../models/User');
 
-function getModel(systemInstruction) {
+const GEMINI_MODEL = 'gemini-1.5-flash';
+const GEMINI_BASE = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}`;
+
+async function geminiChat(systemInstruction, history, ultimaMensagem) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error('GEMINI_API_KEY não configurada. Obtenha uma chave gratuita em https://aistudio.google.com/apikey');
-  const genAI = new GoogleGenerativeAI(key, { apiVersion: 'v1' });
-  return genAI.getGenerativeModel({ model: 'gemini-1.5-flash', systemInstruction });
+
+  const url = `${GEMINI_BASE}:generateContent?key=${key}`;
+  const body = {
+    system_instruction: { parts: [{ text: systemInstruction }] },
+    contents: [
+      ...history,
+      { role: 'user', parts: [{ text: ultimaMensagem }] },
+    ],
+    generationConfig: { maxOutputTokens: 2048, temperature: 0.7 },
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    const msg = err?.error?.message || res.statusText;
+    throw new Error(`Gemini ${res.status}: ${msg}`);
+  }
+
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 }
 
 const SYSTEM_PERSONAL = `Você é um assistente especialista em prescrição de treinos para personal trainers. Responda SEMPRE em português brasileiro.
@@ -73,19 +98,14 @@ async function chat(req, res, next) {
     }
 
     const systemInstruction = contexto === 'aluno' ? SYSTEM_ALUNO : SYSTEM_PERSONAL;
-    const model = getModel(systemInstruction);
 
-    // Histórico = todas menos a última mensagem
     const history = mensagens.slice(0, -1).map((m) => ({
       role: m.role === 'user' ? 'user' : 'model',
       parts: [{ text: m.content }],
     }));
-
     const ultimaMensagem = mensagens[mensagens.length - 1].content;
-    const chatSession = model.startChat({ history });
-    const result = await chatSession.sendMessage(ultimaMensagem);
-    const resposta = result.response.text();
 
+    const resposta = await geminiChat(systemInstruction, history, ultimaMensagem);
     res.json({ resposta });
   } catch (err) {
     next(err);
@@ -171,9 +191,7 @@ async function gerarTreino(req, res, next) {
     const equipStr = equipamentos?.length ? equipamentos.join(', ') : 'academia completa';
     const prompt = `Crie um plano de treino completo para:\n- Aluno: ${alunoNome}\n- Altura: ${altura}cm, Peso: ${peso}kg\n- Objetivo: ${objetivo}\n- Dias/semana: ${diasTreino}, Nível: ${nivel || 'intermediário'}\n- Equipamentos: ${equipStr}`;
 
-    const model = getModel(SYSTEM_PERSONAL);
-    const result = await model.generateContent(prompt);
-    const text = result.response.text();
+    const text = await geminiChat(SYSTEM_PERSONAL, [], prompt);
 
     const jsonMatch = text.match(/```json\n?([\s\S]*?)\n?```/) || text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return res.status(500).json({ message: 'IA retornou resposta inválida.' });
