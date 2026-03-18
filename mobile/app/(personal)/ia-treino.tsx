@@ -116,6 +116,7 @@ export default function IATreinoScreen() {
   const [input, setInput] = useState('');
   const [alunoId, setAlunoId] = useState('');
   const [alunoNome, setAlunoNome] = useState('');
+  const alunoIdRef = useRef('');
   const [modalAluno, setModalAluno] = useState(false);
   const [planoSalvo, setPlanoSalvo] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
@@ -150,6 +151,7 @@ export default function IATreinoScreen() {
     setConversaAtual(null);
     setInput('');
     setAlunoId('');
+    alunoIdRef.current = '';
     setAlunoNome('');
     setPlanoSalvo(false);
   }
@@ -186,13 +188,14 @@ export default function IATreinoScreen() {
 
       // Auto-save plan if an aluno is already selected
       const plano = extractPlan(resposta);
-      if (plano && alunoId) {
+      const currentAlunoId = alunoIdRef.current;
+      if (plano && currentAlunoId) {
         try {
-          const result = await api.post('/ia/salvar-plano', { planoJson: plano, alunoId }).then((r) => r.data);
+          const result = await api.post('/ia/salvar-plano', { planoJson: plano, alunoId: currentAlunoId }).then((r) => r.data);
           setPlanoSalvo(true);
           Alert.alert('Treino salvo! 🎉', result.message);
-        } catch {
-          // Plan card still visible for manual save
+        } catch (err: any) {
+          Alert.alert('Erro ao salvar treino', err?.response?.data?.message || err?.message || 'Falha ao salvar. Use o botão abaixo.');
         }
       }
     },
@@ -230,7 +233,7 @@ export default function IATreinoScreen() {
         <ModalAlunoSelector
           visible={modalAluno}
           alunos={alunos}
-          onSelect={(id, nome) => { setAlunoId(id); setAlunoNome(nome); setModalAluno(false); }}
+          onSelect={(id, nome) => { setAlunoId(id); alunoIdRef.current = id; setAlunoNome(nome); setModalAluno(false); }}
           onClose={() => setModalAluno(false)}
         />
         <View style={{ paddingHorizontal: 20, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#2e2e40' }}>
@@ -300,7 +303,7 @@ export default function IATreinoScreen() {
       <ModalAlunoSelector
         visible={modalAluno}
         alunos={alunos}
-        onSelect={(id, nome) => { setAlunoId(id); setAlunoNome(nome); setModalAluno(false); }}
+        onSelect={(id, nome) => { setAlunoId(id); alunoIdRef.current = id; setAlunoNome(nome); setModalAluno(false); }}
         onClose={() => setModalAluno(false)}
       />
 
