@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput, Modal,
   Alert, ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Linking,
@@ -125,12 +125,22 @@ function ModalNovoAluno({ visivel, onFechar }: { visivel: boolean; onFechar: () 
 }
 
 function ModalEditarAluno({ aluno, onFechar }: { aluno: Aluno | null; onFechar: () => void }) {
-  const [nome, setNome] = useState(aluno?.nome || '');
-  const [telefone, setTelefone] = useState(aluno?.telefone || '');
-  const [objetivo, setObjetivo] = useState(aluno?.objetivo || '');
-  const [peso, setPeso] = useState(aluno?.peso ? String(aluno.peso) : '');
-  const [altura, setAltura] = useState(aluno?.altura ? String(aluno.altura) : '');
+  const [nome, setNome] = useState('');
+  const [telefone, setTelefone] = useState('');
+  const [objetivo, setObjetivo] = useState('');
+  const [peso, setPeso] = useState('');
+  const [altura, setAltura] = useState('');
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (aluno) {
+      setNome(aluno.nome || '');
+      setTelefone(aluno.telefone || '');
+      setObjetivo(aluno.objetivo || '');
+      setPeso(aluno.peso ? String(aluno.peso) : '');
+      setAltura(aluno.altura ? String(aluno.altura) : '');
+    }
+  }, [aluno?._id]);
 
   const editarMutation = useMutation({
     mutationFn: () => api.patch(`/users/alunos/${aluno!._id}`, {

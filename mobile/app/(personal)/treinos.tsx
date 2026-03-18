@@ -590,8 +590,26 @@ export default function TreinosScreen() {
                         </View>
                         <Text className="text-textPrimary font-bold text-base">{treino.nome}</Text>
                       </View>
-                      <View className="bg-surface border border-border rounded-lg p-1.5">
-                        <Ionicons name="create-outline" size={16} color="#6C63FF" />
+                      <View className="flex-row gap-2">
+                        <View className="bg-surface border border-border rounded-lg p-1.5">
+                          <Ionicons name="create-outline" size={16} color="#6C63FF" />
+                        </View>
+                        <TouchableOpacity
+                          onPress={(e) => {
+                            e.stopPropagation();
+                            Alert.alert(
+                              'Remover treino?',
+                              `"${treino.nome}" será removido permanentemente.`,
+                              [
+                                { text: 'Cancelar', style: 'cancel' },
+                                { text: 'Remover', style: 'destructive', onPress: () => deletarMutation.mutate(treino._id) },
+                              ]
+                            );
+                          }}
+                          className="bg-error/10 border border-error/30 rounded-lg p-1.5"
+                        >
+                          <Ionicons name="trash-outline" size={16} color="#f87171" />
+                        </TouchableOpacity>
                       </View>
                     </View>
                     <View className="flex-row gap-4 pt-2 border-t border-border">

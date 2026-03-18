@@ -616,6 +616,7 @@ export default function ProgressoScreen() {
     nome: string;
   } | null>(null);
   const [sessaoSelecionada, setSessaoSelecionada] = useState<string | null>(null);
+  const [mostrarTodasSessoes, setMostrarTodasSessoes] = useState(false);
 
   const { data, isLoading } = useQuery<ResumoData>({
     queryKey: ['progresso-resumo'],
@@ -741,40 +742,59 @@ export default function ProgressoScreen() {
             <Text className="text-textMuted text-xs">Toque para detalhar</Text>
           </View>
           {data?.ultimasSessoes && data.ultimasSessoes.length > 0 ? (
-            data.ultimasSessoes.map((sessao) => (
-              <TouchableOpacity
-                key={sessao._id}
-                onPress={() => setSessaoSelecionada(sessao._id)}
-                className="bg-surface border border-border rounded-2xl p-4 mb-3 active:border-primary"
-              >
-                <View className="flex-row justify-between items-center">
-                  <View className="flex-1">
-                    <View className="bg-primary/20 px-2 py-0.5 rounded-md self-start mb-1">
-                      <Text className="text-primary text-xs font-bold">
-                        Treino {sessao.treino.tipo}
+            <>
+              {(mostrarTodasSessoes ? data.ultimasSessoes : data.ultimasSessoes.slice(0, 3)).map((sessao) => (
+                <TouchableOpacity
+                  key={sessao._id}
+                  onPress={() => setSessaoSelecionada(sessao._id)}
+                  className="bg-surface border border-border rounded-2xl p-4 mb-3 active:border-primary"
+                >
+                  <View className="flex-row justify-between items-center">
+                    <View className="flex-1">
+                      <View className="bg-primary/20 px-2 py-0.5 rounded-md self-start mb-1">
+                        <Text className="text-primary text-xs font-bold">
+                          Treino {sessao.treino.tipo}
+                        </Text>
+                      </View>
+                      <Text className="text-textPrimary font-semibold">{sessao.treino.nome}</Text>
+                      <Text className="text-textMuted text-xs mt-0.5">
+                        {new Date(sessao.dataFim).toLocaleDateString('pt-BR', {
+                          weekday: 'short',
+                          day: '2-digit',
+                          month: 'short',
+                        })}
                       </Text>
                     </View>
-                    <Text className="text-textPrimary font-semibold">{sessao.treino.nome}</Text>
-                    <Text className="text-textMuted text-xs mt-0.5">
-                      {new Date(sessao.dataFim).toLocaleDateString('pt-BR', {
-                        weekday: 'short',
-                        day: '2-digit',
-                        month: 'short',
-                      })}
-                    </Text>
-                  </View>
-                  <View className="items-end gap-1">
-                    <View className="flex-row items-center gap-1">
-                      <Ionicons name="time-outline" size={14} color="#9090a8" />
-                      <Text className="text-textSecondary text-sm">
-                        {formatDuracao(sessao.duracaoSegundos)}
-                      </Text>
+                    <View className="items-end gap-1">
+                      <View className="flex-row items-center gap-1">
+                        <Ionicons name="time-outline" size={14} color="#9090a8" />
+                        <Text className="text-textSecondary text-sm">
+                          {formatDuracao(sessao.duracaoSegundos)}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color="#5a5a70" />
                     </View>
-                    <Ionicons name="chevron-forward" size={16} color="#5a5a70" />
                   </View>
-                </View>
-              </TouchableOpacity>
-            ))
+                </TouchableOpacity>
+              ))}
+              {data.ultimasSessoes.length > 3 && (
+                <TouchableOpacity
+                  onPress={() => setMostrarTodasSessoes((v) => !v)}
+                  className="flex-row items-center justify-center gap-1.5 py-3 border border-border rounded-2xl"
+                >
+                  <Text className="text-textSecondary text-sm">
+                    {mostrarTodasSessoes
+                      ? 'Ver menos'
+                      : `Ver todos (${data.ultimasSessoes.length})`}
+                  </Text>
+                  <Ionicons
+                    name={mostrarTodasSessoes ? 'chevron-up' : 'chevron-down'}
+                    size={16}
+                    color="#9090a8"
+                  />
+                </TouchableOpacity>
+              )}
+            </>
           ) : (
             <View className="py-10 items-center">
               <Ionicons name="calendar-outline" size={40} color="#2e2e40" />

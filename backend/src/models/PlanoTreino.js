@@ -20,6 +20,7 @@ const PlanoTreinoSchema = new Schema(
       },
     ],
 
+    duracaoMeses: { type: Number, default: null }, // null = sem expiração
     ativo: { type: Boolean, default: true },
   },
   { timestamps: true }

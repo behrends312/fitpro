@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput, Modal,
-  Alert, ActivityIndicator, FlatList, Switch, KeyboardAvoidingView, Platform,
+  Alert, ActivityIndicator, FlatList, SectionList, Switch, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -180,6 +180,7 @@ export default function ExerciciosScreen() {
   const [busca, setBusca] = useState('');
   const [modalAberto, setModalAberto] = useState(false);
   const [grupoSel, setGrupoSel] = useState(GRUPOS_MUSCULARES[0].nome);
+  const [grupoLib, setGrupoLib] = useState('Todos');
   const [importando, setImportando] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
@@ -192,6 +193,35 @@ export default function ExerciciosScreen() {
     },
     enabled: aba === 'biblioteca',
   });
+
+  // Derive unique muscle groups from library
+  const muscGrupos = useMemo(() => {
+    const grupos = new Set<string>();
+    exercicios.forEach((ex) => ex.musculosPrincipais?.forEach((m) => grupos.add(m)));
+    return ['Todos', ...Array.from(grupos).sort()];
+  }, [exercicios]);
+
+  // Group exercises into sections
+  const secoes = useMemo(() => {
+    const filtrados = grupoLib === 'Todos'
+      ? exercicios
+      : exercicios.filter((ex) => ex.musculosPrincipais?.includes(grupoLib));
+
+    if (grupoLib !== 'Todos') {
+      return [{ title: grupoLib, data: filtrados }];
+    }
+
+    // Group by first muscle or "Sem grupo"
+    const mapa = new Map<string, Exercicio[]>();
+    filtrados.forEach((ex) => {
+      const grupo = ex.musculosPrincipais?.[0] || 'Sem grupo';
+      if (!mapa.has(grupo)) mapa.set(grupo, []);
+      mapa.get(grupo)!.push(ex);
+    });
+    return Array.from(mapa.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([title, data]) => ({ title, data }));
+  }, [exercicios, grupoLib]);
 
   const deletarMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/exercicios/${id}`),
@@ -240,23 +270,59 @@ export default function ExerciciosScreen() {
       {aba === 'biblioteca' ? (
         <>
           {/* Busca */}
-          <View className="mx-5 mb-4 flex-row items-center bg-surface border border-border rounded-xl px-4">
+          <View className="mx-5 mb-3 flex-row items-center bg-surface border border-border rounded-xl px-4">
             <Ionicons name="search-outline" size={18} color="#9090a8" />
             <TextInput className="flex-1 text-textPrimary py-3.5 ml-3 text-base" placeholder="Buscar exercício..." placeholderTextColor="#5a5a70" value={busca} onChangeText={setBusca} />
           </View>
 
+          {/* Filtro por grupo muscular */}
+          {!isLoading && muscGrupos.length > 1 && (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, marginBottom: 12 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 8, alignItems: 'center' }}>
+              {muscGrupos.map((g) => {
+                const ativo = grupoLib === g;
+                return (
+                  <TouchableOpacity
+                    key={g}
+                    onPress={() => setGrupoLib(g)}
+                    style={{
+                      paddingHorizontal: 16,
+                      paddingVertical: 8,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      backgroundColor: ativo ? '#6C63FF' : '#1a1a2e',
+                      borderColor: ativo ? '#6C63FF' : '#2e2e40',
+                    }}
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: ativo ? '#ffffff' : '#9090a8' }}>{g}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          )}
+
           {isLoading ? (
             <ActivityIndicator color="#6C63FF" style={{ marginTop: 40 }} />
           ) : (
-            <FlatList
-              data={exercicios}
+            <SectionList
+              sections={secoes}
               keyExtractor={(e) => e._id}
+              style={{ flex: 1 }}
               contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }}
+              stickySectionHeadersEnabled={false}
               ListEmptyComponent={
                 <View className="items-center py-16">
                   <Ionicons name="barbell-outline" size={56} color="#2e2e40" />
                   <Text className="text-textSecondary text-center mt-4">Nenhum exercício ainda.{'\n'}Crie ou importe dos predefinidos!</Text>
                 </View>
+              }
+              renderSectionHeader={({ section }) =>
+                grupoLib === 'Todos' ? (
+                  <View className="flex-row items-center gap-2 mb-2 mt-4">
+                    <Text className="text-textSecondary text-xs font-bold uppercase tracking-widest">{section.title}</Text>
+                    <View className="flex-1 h-px bg-border" />
+                    <Text className="text-textMuted text-xs">{section.data.length}</Text>
+                  </View>
+                ) : null
               }
               renderItem={({ item: ex }) => (
                 <TouchableOpacity
@@ -288,18 +354,33 @@ export default function ExerciciosScreen() {
       ) : (
         <>
           {/* Filtro por grupo muscular */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-3" contentContainerStyle={{ paddingHorizontal: 20, gap: 8 }}>
-            {GRUPOS_MUSCULARES.map((g) => (
-              <TouchableOpacity key={g.nome} onPress={() => setGrupoSel(g.nome)} className={`px-4 py-2 rounded-xl border ${grupoSel === g.nome ? 'bg-primary border-primary' : 'bg-surface border-border'}`}>
-                <Text className={`text-sm font-semibold ${grupoSel === g.nome ? 'text-white' : 'text-textSecondary'}`}>{g.nome}</Text>
-              </TouchableOpacity>
-            ))}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, marginBottom: 12 }} contentContainerStyle={{ paddingHorizontal: 20, gap: 8, alignItems: 'center' }}>
+            {GRUPOS_MUSCULARES.map((g) => {
+              const ativo = grupoSel === g.nome;
+              return (
+                <TouchableOpacity
+                  key={g.nome}
+                  onPress={() => setGrupoSel(g.nome)}
+                  style={{
+                    paddingHorizontal: 16,
+                    paddingVertical: 8,
+                    borderRadius: 12,
+                    borderWidth: 1,
+                    backgroundColor: ativo ? '#6C63FF' : '#1a1a2e',
+                    borderColor: ativo ? '#6C63FF' : '#2e2e40',
+                  }}
+                >
+                  <Text style={{ fontSize: 14, fontWeight: '600', color: ativo ? '#ffffff' : '#9090a8' }}>{g.nome}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
 
           {/* Lista de exercícios predefinidos */}
           <FlatList
             data={grupoAtual?.exercicios ?? []}
             keyExtractor={(e) => e.nome}
+            style={{ flex: 1 }}
             contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }}
             renderItem={({ item: ex }) => (
               <View className="bg-surface border border-border rounded-2xl p-4 mb-3 flex-row items-center">

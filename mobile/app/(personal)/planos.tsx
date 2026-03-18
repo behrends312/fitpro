@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput, Modal,
   Alert, ActivityIndicator, KeyboardAvoidingView, Platform, FlatList,
@@ -12,6 +12,7 @@ interface Exercicio { _id: string; nome: string; musculosPrincipais: string[] }
 interface Aluno { _id: string; nome: string; email: string }
 
 interface TreinoTemplate {
+  _id?: string; // id do treino existente (para edit mode)
   nome: string;
   tipo: string;
   diasSemana: string[];
@@ -30,6 +31,7 @@ interface Plano {
   nome: string;
   descricao: string;
   nivel: 'iniciante' | 'intermediario' | 'avancado';
+  duracaoMeses?: number | null;
   treinos: Array<{ ordem: number; treino: { _id: string; nome: string; tipo: string; exercicios: any[] } }>;
   createdAt: string;
 }
@@ -41,6 +43,14 @@ const NIVEIS = [
 ];
 const DIAS = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'];
 const DIAS_LABEL: Record<string, string> = { seg: 'Seg', ter: 'Ter', qua: 'Qua', qui: 'Qui', sex: 'Sex', sab: 'Sáb', dom: 'Dom' };
+const DURACOES = [
+  { valor: null, label: 'Sem prazo' },
+  { valor: 1, label: '1 mês' },
+  { valor: 2, label: '2 meses' },
+  { valor: 3, label: '3 meses' },
+  { valor: 6, label: '6 meses' },
+  { valor: 12, label: '1 ano' },
+];
 
 // ---- Modal Atribuir ----
 function ModalAtribuir({
@@ -135,39 +145,73 @@ function ModalPlano({
   const queryClient = useQueryClient();
   const isEdit = !!planoEdit;
 
+  // ── Info states ─────────────────────────────────────────────────────────────
   const [nome, setNome] = useState(planoEdit?.nome || '');
   const [descricao, setDescricao] = useState(planoEdit?.descricao || '');
   const [nivel, setNivel] = useState<'iniciante' | 'intermediario' | 'avancado'>(
     planoEdit?.nivel || 'iniciante'
   );
+  const [duracaoMeses, setDuracaoMeses] = useState<number | null>(
+    planoEdit?.duracaoMeses ?? null
+  );
+
+  // ── Step ────────────────────────────────────────────────────────────────────
+  const [stepAtual, setStepAtual] = useState<'info' | 'treinos'>('info');
+
+  // ── Treinos ─────────────────────────────────────────────────────────────────
   const [treinos, setTreinos] = useState<TreinoTemplate[]>(
-    isEdit
-      ? []
+    isEdit && planoEdit?.treinos.length
+      ? planoEdit.treinos.map(({ treino }) => ({
+          _id: treino._id,
+          nome: treino.nome,
+          tipo: treino.tipo,
+          diasSemana: [],
+          exercicios: (treino.exercicios as any[]).map((ex) => ({
+            exercicio: ex.exercicio?._id || ex.exercicio,
+            exercicioNome: ex.exercicio?.nome || '',
+            series: ex.series ?? 3,
+            reps: ex.reps ?? '10',
+            carga: ex.carga ?? 0,
+            descanso: ex.descanso ?? 60,
+          })),
+        }))
       : [{ nome: 'Treino A', tipo: 'A', diasSemana: [], exercicios: [] }]
   );
-  const [stepAtual, setStepAtual] = useState<'info' | 'treinos'>('info');
   const [treinoAtivo, setTreinoAtivo] = useState(0);
-  const [buscaExercicio, setBuscaExercicio] = useState('');
-  const [mostrarExercicios, setMostrarExercicios] = useState(false);
 
+  // ── Modal exercícios ─────────────────────────────────────────────────────────
+  const [mostrarExercicios, setMostrarExercicios] = useState(false);
+  const [buscaExercicio, setBuscaExercicio] = useState('');
+  const [filtroMusculo, setFiltroMusculo] = useState('');
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+
+  // ── Queries ──────────────────────────────────────────────────────────────────
   const { data: exerciciosDisponiveis = [] } = useQuery<Exercicio[]>({
     queryKey: ['exercicios-todos'],
     queryFn: () => api.get('/exercicios').then((r) => r.data),
   });
 
-  const exerciciosFiltrados = exerciciosDisponiveis.filter((e) =>
-    e.nome.toLowerCase().includes(buscaExercicio.toLowerCase())
-  );
+  const todosMusc = useMemo(() => {
+    const set = new Set<string>();
+    exerciciosDisponiveis.forEach((e) => e.musculosPrincipais?.forEach((m) => set.add(m)));
+    return Array.from(set).sort();
+  }, [exerciciosDisponiveis]);
 
-  const salvarMutation = useMutation({
-    mutationFn: () => {
-      if (isEdit) {
-        return api.patch(`/planos/${planoEdit!._id}`, { nome, descricao, nivel });
-      }
-      return api.post('/planos', {
+  const exerciciosFiltrados = exerciciosDisponiveis.filter((e) => {
+    const matchBusca = e.nome.toLowerCase().includes(buscaExercicio.toLowerCase());
+    const matchMusc = !filtroMusculo || e.musculosPrincipais?.includes(filtroMusculo);
+    return matchBusca && matchMusc;
+  });
+
+  // ── Mutations ────────────────────────────────────────────────────────────────
+  // Criar plano (novo)
+  const criarMutation = useMutation({
+    mutationFn: () =>
+      api.post('/planos', {
         nome,
         descricao,
         nivel,
+        duracaoMeses,
         treinos: treinos.map((t) => ({
           ...t,
           exercicios: t.exercicios.map((ex) => ({
@@ -178,15 +222,51 @@ function ModalPlano({
             descanso: ex.descanso,
           })),
         })),
-      });
-    },
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['planos'] });
       onClose();
     },
-    onError: () => Alert.alert('Erro', 'Não foi possível salvar o plano.'),
+    onError: () => Alert.alert('Erro', 'Não foi possível criar o plano.'),
   });
 
+  // Salvar informações do plano (edit — só info)
+  const salvarInfoMutation = useMutation({
+    mutationFn: () =>
+      api.patch(`/planos/${planoEdit!._id}`, { nome, descricao, nivel, duracaoMeses }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['planos'] });
+      Alert.alert('Salvo!', 'Informações do plano atualizadas.');
+    },
+    onError: () => Alert.alert('Erro', 'Não foi possível salvar as informações.'),
+  });
+
+  // Salvar exercícios dos treinos (edit — só treinos)
+  const salvarExerciciosMutation = useMutation({
+    mutationFn: () =>
+      Promise.all(
+        treinos
+          .filter((t) => t._id)
+          .map((t) =>
+            api.patch(`/treinos/${t._id}`, {
+              exercicios: t.exercicios.map((ex) => ({
+                exercicio: ex.exercicio,
+                series: ex.series,
+                reps: ex.reps,
+                carga: ex.carga,
+                descanso: ex.descanso,
+              })),
+            })
+          )
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['planos'] });
+      onClose();
+    },
+    onError: () => Alert.alert('Erro', 'Não foi possível salvar os exercícios.'),
+  });
+
+  // ── Helpers — treinos ────────────────────────────────────────────────────────
   function adicionarTreino() {
     const tipos = ['A', 'B', 'C', 'D', 'E', 'F'];
     const prox = tipos[treinos.length] || String(treinos.length + 1);
@@ -218,31 +298,6 @@ function ModalPlano({
     );
   }
 
-  function adicionarExercicio(ex: Exercicio) {
-    setTreinos((prev) =>
-      prev.map((t, i) =>
-        i !== treinoAtivo
-          ? t
-          : {
-              ...t,
-              exercicios: [
-                ...t.exercicios,
-                {
-                  exercicio: ex._id,
-                  exercicioNome: ex.nome,
-                  series: 3,
-                  reps: '10',
-                  carga: 0,
-                  descanso: 60,
-                },
-              ],
-            }
-      )
-    );
-    setMostrarExercicios(false);
-    setBuscaExercicio('');
-  }
-
   function removerExercicio(exIdx: number) {
     setTreinos((prev) =>
       prev.map((t, i) =>
@@ -268,6 +323,51 @@ function ModalPlano({
     );
   }
 
+  // ── Helpers — seleção de exercícios ─────────────────────────────────────────
+  function toggleSelecionado(id: string) {
+    setSelecionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function adicionarSelecionados() {
+    const exsParaAdicionar = exerciciosDisponiveis.filter((e) => selecionados.has(e._id));
+    setTreinos((prev) =>
+      prev.map((t, i) =>
+        i !== treinoAtivo
+          ? t
+          : {
+              ...t,
+              exercicios: [
+                ...t.exercicios,
+                ...exsParaAdicionar.map((ex) => ({
+                  exercicio: ex._id,
+                  exercicioNome: ex.nome,
+                  series: 3,
+                  reps: '10',
+                  carga: 0,
+                  descanso: 60,
+                })),
+              ],
+            }
+      )
+    );
+    setSelecionados(new Set());
+    setMostrarExercicios(false);
+    setBuscaExercicio('');
+    setFiltroMusculo('');
+  }
+
+  function fecharModalExercicios() {
+    setMostrarExercicios(false);
+    setBuscaExercicio('');
+    setFiltroMusculo('');
+    setSelecionados(new Set());
+  }
+
   const treinoAtualObj = treinos[treinoAtivo];
 
   return (
@@ -280,30 +380,35 @@ function ModalPlano({
           <View className="bg-surface rounded-t-3xl" style={{ height: '92%' }}>
             {/* Header */}
             <View className="flex-row justify-between items-center px-6 pt-6 pb-4 border-b border-border">
-              <Text className="text-textPrimary text-lg font-bold">
-                {isEdit ? 'Editar plano' : 'Novo plano'}
-              </Text>
+              <View className="flex-row items-center gap-3">
+                {stepAtual === 'treinos' && (
+                  <TouchableOpacity onPress={() => setStepAtual('info')}>
+                    <Ionicons name="arrow-back" size={22} color="#9090a8" />
+                  </TouchableOpacity>
+                )}
+                <Text className="text-textPrimary text-lg font-bold">
+                  {isEdit ? 'Editar plano' : 'Novo plano'}
+                </Text>
+              </View>
               <TouchableOpacity onPress={onClose}>
                 <Ionicons name="close" size={24} color="#9090a8" />
               </TouchableOpacity>
             </View>
 
-            {/* Steps (apenas para criar) */}
-            {!isEdit && (
-              <View className="flex-row px-6 pt-4 gap-2">
-                {['info', 'treinos'].map((s) => (
-                  <View
-                    key={s}
-                    className={`flex-1 h-1 rounded-full ${stepAtual === s || (s === 'info') ? 'bg-primary' : 'bg-border'}`}
-                    style={{ opacity: stepAtual === s ? 1 : stepAtual === 'treinos' && s === 'info' ? 1 : 0.3 }}
-                  />
-                ))}
-              </View>
-            )}
+            {/* Indicador de steps */}
+            <View className="flex-row px-6 pt-4 gap-2">
+              {['info', 'treinos'].map((s) => (
+                <View
+                  key={s}
+                  className="flex-1 h-1 rounded-full bg-primary"
+                  style={{ opacity: stepAtual === s ? 1 : 0.25 }}
+                />
+              ))}
+            </View>
 
             <ScrollView className="flex-1 px-6 pt-5" keyboardShouldPersistTaps="handled">
-              {/* STEP INFO */}
-              {(stepAtual === 'info' || isEdit) && (
+              {/* ── STEP INFO ── */}
+              {stepAtual === 'info' && (
                 <View>
                   <Text className="text-textSecondary text-xs font-semibold uppercase tracking-widest mb-2">
                     Nome do plano *
@@ -332,7 +437,7 @@ function ModalPlano({
                   <Text className="text-textSecondary text-xs font-semibold uppercase tracking-widest mb-2">
                     Nível
                   </Text>
-                  <View className="flex-row gap-2 mb-6">
+                  <View className="flex-row gap-2 mb-5">
                     {NIVEIS.map((n) => (
                       <TouchableOpacity
                         key={n.key}
@@ -350,18 +455,47 @@ function ModalPlano({
                     ))}
                   </View>
 
+                  <Text className="text-textSecondary text-xs font-semibold uppercase tracking-widest mb-2">
+                    Duração do plano
+                  </Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-6 -mx-1" contentContainerStyle={{ paddingHorizontal: 4 }}>
+                    {DURACOES.map((d) => (
+                      <TouchableOpacity
+                        key={String(d.valor)}
+                        onPress={() => setDuracaoMeses(d.valor)}
+                        className={`mr-2 px-4 py-2.5 rounded-xl border ${
+                          duracaoMeses === d.valor ? 'bg-primary border-primary' : 'bg-background border-border'
+                        }`}
+                      >
+                        <Text
+                          className={`text-xs font-bold ${duracaoMeses === d.valor ? 'text-white' : 'text-textSecondary'}`}
+                        >
+                          {d.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+
                   {isEdit ? (
-                    <TouchableOpacity
-                      onPress={() => salvarMutation.mutate()}
-                      disabled={!nome.trim() || salvarMutation.isPending}
-                      className="bg-primary rounded-2xl py-4 items-center mb-8"
-                    >
-                      {salvarMutation.isPending ? (
-                        <ActivityIndicator color="white" />
-                      ) : (
-                        <Text className="text-white font-bold text-base">Salvar alterações</Text>
-                      )}
-                    </TouchableOpacity>
+                    <View className="gap-3 mb-8">
+                      <TouchableOpacity
+                        onPress={() => salvarInfoMutation.mutate()}
+                        disabled={!nome.trim() || salvarInfoMutation.isPending}
+                        className="bg-surface border border-border rounded-2xl py-4 items-center"
+                      >
+                        {salvarInfoMutation.isPending ? (
+                          <ActivityIndicator color="#6C63FF" />
+                        ) : (
+                          <Text className="text-textPrimary font-bold text-base">Salvar informações</Text>
+                        )}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => setStepAtual('treinos')}
+                        className="bg-primary rounded-2xl py-4 items-center"
+                      >
+                        <Text className="text-white font-bold text-base">Editar exercícios →</Text>
+                      </TouchableOpacity>
+                    </View>
                   ) : (
                     <TouchableOpacity
                       onPress={() => {
@@ -376,8 +510,8 @@ function ModalPlano({
                 </View>
               )}
 
-              {/* STEP TREINOS */}
-              {stepAtual === 'treinos' && !isEdit && (
+              {/* ── STEP TREINOS ── */}
+              {stepAtual === 'treinos' && (
                 <View>
                   {/* Abas dos treinos */}
                   <ScrollView
@@ -405,62 +539,77 @@ function ModalPlano({
                         </Text>
                       </TouchableOpacity>
                     ))}
-                    <TouchableOpacity
-                      onPress={adicionarTreino}
-                      className="px-4 py-2 rounded-xl border border-dashed border-border bg-background"
-                    >
-                      <Text className="text-textMuted text-sm">+ Treino</Text>
-                    </TouchableOpacity>
+                    {!isEdit && (
+                      <TouchableOpacity
+                        onPress={adicionarTreino}
+                        className="px-4 py-2 rounded-xl border border-dashed border-border bg-background"
+                      >
+                        <Text className="text-textMuted text-sm">+ Treino</Text>
+                      </TouchableOpacity>
+                    )}
                   </ScrollView>
 
                   {/* Nome do treino */}
-                  <View className="flex-row items-center gap-2 mb-4">
-                    <TextInput
-                      className="flex-1 bg-background border border-border rounded-xl px-4 py-3 text-textPrimary text-base"
-                      value={treinoAtualObj.nome}
-                      onChangeText={(v) =>
-                        setTreinos((prev) =>
-                          prev.map((t, i) => (i === treinoAtivo ? { ...t, nome: v } : t))
-                        )
-                      }
-                      placeholder="Nome do treino"
-                      placeholderTextColor="#5a5a70"
-                    />
-                    {treinos.length > 1 && (
-                      <TouchableOpacity
-                        onPress={() => removerTreino(treinoAtivo)}
-                        className="w-12 h-12 bg-error/10 border border-error/30 rounded-xl items-center justify-center"
-                      >
-                        <Ionicons name="trash-outline" size={18} color="#f87171" />
-                      </TouchableOpacity>
-                    )}
-                  </View>
-
-                  {/* Dias da semana */}
-                  <Text className="text-textSecondary text-xs font-semibold uppercase tracking-widest mb-2">
-                    Dias da semana
-                  </Text>
-                  <View className="flex-row flex-wrap gap-2 mb-4">
-                    {DIAS.map((dia) => (
-                      <TouchableOpacity
-                        key={dia}
-                        onPress={() => toggleDia(dia)}
-                        className={`px-3 py-1.5 rounded-lg border ${
-                          treinoAtualObj.diasSemana.includes(dia)
-                            ? 'bg-primary border-primary'
-                            : 'bg-background border-border'
-                        }`}
-                      >
-                        <Text
-                          className={`text-xs font-semibold ${
-                            treinoAtualObj.diasSemana.includes(dia) ? 'text-white' : 'text-textSecondary'
-                          }`}
+                  {!isEdit && (
+                    <View className="flex-row items-center gap-2 mb-4">
+                      <TextInput
+                        className="flex-1 bg-background border border-border rounded-xl px-4 py-3 text-textPrimary text-base"
+                        value={treinoAtualObj.nome}
+                        onChangeText={(v) =>
+                          setTreinos((prev) =>
+                            prev.map((t, i) => (i === treinoAtivo ? { ...t, nome: v } : t))
+                          )
+                        }
+                        placeholder="Nome do treino"
+                        placeholderTextColor="#5a5a70"
+                      />
+                      {treinos.length > 1 && (
+                        <TouchableOpacity
+                          onPress={() => removerTreino(treinoAtivo)}
+                          className="w-12 h-12 bg-error/10 border border-error/30 rounded-xl items-center justify-center"
                         >
-                          {DIAS_LABEL[dia]}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
+                          <Ionicons name="trash-outline" size={18} color="#f87171" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+
+                  {/* Nome do treino (somente leitura no edit) */}
+                  {isEdit && (
+                    <View className="bg-background border border-border rounded-xl px-4 py-3 mb-4">
+                      <Text className="text-textPrimary font-semibold">{treinoAtualObj.nome}</Text>
+                    </View>
+                  )}
+
+                  {/* Dias da semana (apenas em modo criar) */}
+                  {!isEdit && (
+                    <>
+                      <Text className="text-textSecondary text-xs font-semibold uppercase tracking-widest mb-2">
+                        Dias da semana
+                      </Text>
+                      <View className="flex-row flex-wrap gap-2 mb-4">
+                        {DIAS.map((dia) => (
+                          <TouchableOpacity
+                            key={dia}
+                            onPress={() => toggleDia(dia)}
+                            className={`px-3 py-1.5 rounded-lg border ${
+                              treinoAtualObj.diasSemana.includes(dia)
+                                ? 'bg-primary border-primary'
+                                : 'bg-background border-border'
+                            }`}
+                          >
+                            <Text
+                              className={`text-xs font-semibold ${
+                                treinoAtualObj.diasSemana.includes(dia) ? 'text-white' : 'text-textSecondary'
+                              }`}
+                            >
+                              {DIAS_LABEL[dia]}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </>
+                  )}
 
                   {/* Exercícios */}
                   <View className="flex-row items-center justify-between mb-3">
@@ -525,14 +674,16 @@ function ModalPlano({
                   )}
 
                   <TouchableOpacity
-                    onPress={() => salvarMutation.mutate()}
-                    disabled={salvarMutation.isPending}
+                    onPress={() => isEdit ? salvarExerciciosMutation.mutate() : criarMutation.mutate()}
+                    disabled={isEdit ? salvarExerciciosMutation.isPending : criarMutation.isPending}
                     className="bg-primary rounded-2xl py-4 items-center mt-4 mb-8"
                   >
-                    {salvarMutation.isPending ? (
+                    {(isEdit ? salvarExerciciosMutation.isPending : criarMutation.isPending) ? (
                       <ActivityIndicator color="white" />
                     ) : (
-                      <Text className="text-white font-bold text-base">Criar plano</Text>
+                      <Text className="text-white font-bold text-base">
+                        {isEdit ? 'Salvar exercícios' : 'Criar plano'}
+                      </Text>
                     )}
                   </TouchableOpacity>
                 </View>
@@ -542,49 +693,117 @@ function ModalPlano({
         </View>
       </KeyboardAvoidingView>
 
-      {/* Modal busca de exercícios */}
-      <Modal visible={mostrarExercicios} transparent animationType="slide">
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' }}>
-          <View className="bg-surface rounded-t-3xl" style={{ height: '70%' }}>
-            <View className="flex-row justify-between items-center px-6 pt-6 pb-4 border-b border-border">
-              <Text className="text-textPrimary font-bold text-lg">Adicionar exercício</Text>
-              <TouchableOpacity onPress={() => { setMostrarExercicios(false); setBuscaExercicio(''); }}>
-                <Ionicons name="close" size={24} color="#9090a8" />
-              </TouchableOpacity>
-            </View>
-            <View className="px-5 py-3">
-              <TextInput
-                className="bg-background border border-border rounded-xl px-4 py-3 text-textPrimary"
-                value={buscaExercicio}
-                onChangeText={setBuscaExercicio}
-                placeholder="Buscar exercício..."
-                placeholderTextColor="#5a5a70"
-                autoFocus
-              />
-            </View>
-            <FlatList
-              data={exerciciosFiltrados}
-              keyExtractor={(e) => e._id}
-              contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 32 }}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  onPress={() => adicionarExercicio(item)}
-                  className="flex-row items-center bg-background border border-border rounded-xl px-4 py-3 mb-2"
-                >
-                  <View className="flex-1">
-                    <Text className="text-textPrimary font-semibold">{item.nome}</Text>
-                    {item.musculosPrincipais?.length > 0 && (
-                      <Text className="text-textMuted text-xs mt-0.5">
-                        {item.musculosPrincipais.join(' · ')}
-                      </Text>
-                    )}
-                  </View>
-                  <Ionicons name="add-circle-outline" size={22} color="#6C63FF" />
+      {/* ── Modal busca/seleção de exercícios ── */}
+      <Modal visible={mostrarExercicios} transparent animationType="slide" onRequestClose={fecharModalExercicios}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' }}>
+            <View className="bg-surface rounded-t-3xl" style={{ maxHeight: '85%' }}>
+              {/* Header */}
+              <View className="flex-row justify-between items-center px-6 pt-6 pb-3 border-b border-border">
+                <Text className="text-textPrimary font-bold text-lg">Adicionar exercícios</Text>
+                <TouchableOpacity onPress={fecharModalExercicios}>
+                  <Ionicons name="close" size={24} color="#9090a8" />
                 </TouchableOpacity>
+              </View>
+
+              {/* Busca */}
+              <View className="px-5 pt-3 pb-2">
+                <TextInput
+                  className="bg-background border border-border rounded-xl px-4 py-3 text-textPrimary"
+                  value={buscaExercicio}
+                  onChangeText={setBuscaExercicio}
+                  placeholder="Buscar exercício..."
+                  placeholderTextColor="#5a5a70"
+                  autoFocus
+                />
+              </View>
+
+              {/* Filtro por grupo muscular */}
+              {todosMusc.length > 0 && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 8, gap: 6 }}
+                >
+                  <TouchableOpacity
+                    onPress={() => setFiltroMusculo('')}
+                    className={`px-3 py-1.5 rounded-lg border ${
+                      !filtroMusculo ? 'bg-primary border-primary' : 'bg-background border-border'
+                    }`}
+                  >
+                    <Text className={`text-xs font-semibold ${!filtroMusculo ? 'text-white' : 'text-textSecondary'}`}>
+                      Todos
+                    </Text>
+                  </TouchableOpacity>
+                  {todosMusc.map((m) => (
+                    <TouchableOpacity
+                      key={m}
+                      onPress={() => setFiltroMusculo(filtroMusculo === m ? '' : m)}
+                      className={`px-3 py-1.5 rounded-lg border ${
+                        filtroMusculo === m ? 'bg-primary border-primary' : 'bg-background border-border'
+                      }`}
+                    >
+                      <Text className={`text-xs font-semibold ${filtroMusculo === m ? 'text-white' : 'text-textSecondary'}`}>
+                        {m}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
               )}
-            />
+
+              {/* Lista */}
+              <FlatList
+                data={exerciciosFiltrados}
+                keyExtractor={(e) => e._id}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: selecionados.size > 0 ? 90 : 32 }}
+                renderItem={({ item }) => {
+                  const sel = selecionados.has(item._id);
+                  return (
+                    <TouchableOpacity
+                      onPress={() => toggleSelecionado(item._id)}
+                      className={`flex-row items-center rounded-xl px-4 py-3 mb-2 border ${
+                        sel ? 'bg-primary/10 border-primary/40' : 'bg-background border-border'
+                      }`}
+                    >
+                      <View className="flex-1">
+                        <Text className={`font-semibold ${sel ? 'text-primary' : 'text-textPrimary'}`}>
+                          {item.nome}
+                        </Text>
+                        {item.musculosPrincipais?.length > 0 && (
+                          <Text className="text-textMuted text-xs mt-0.5">
+                            {item.musculosPrincipais.join(' · ')}
+                          </Text>
+                        )}
+                      </View>
+                      <View
+                        className={`w-6 h-6 rounded-full items-center justify-center border-2 ${
+                          sel ? 'bg-primary border-primary' : 'border-border'
+                        }`}
+                      >
+                        {sel && <Ionicons name="checkmark" size={14} color="white" />}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                }}
+              />
+
+              {/* Botão flutuante de confirmar seleção */}
+              {selecionados.size > 0 && (
+                <View className="absolute bottom-0 left-0 right-0 px-5 pb-8 pt-3 bg-surface border-t border-border">
+                  <TouchableOpacity
+                    onPress={adicionarSelecionados}
+                    className="bg-primary rounded-2xl py-4 items-center"
+                  >
+                    <Text className="text-white font-bold text-base">
+                      Adicionar {selecionados.size} exercício{selecionados.size !== 1 ? 's' : ''}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </Modal>
   );
@@ -698,6 +917,14 @@ export default function PlanosScreen() {
                     <Text className="text-textMuted text-xs">
                       {plano.treinos.length} treino(s)
                     </Text>
+                    {plano.duracaoMeses && (
+                      <View className="flex-row items-center gap-1 bg-background border border-border rounded-md px-2 py-0.5">
+                        <Ionicons name="time-outline" size={10} color="#9090a8" />
+                        <Text className="text-textMuted text-xs">
+                          {plano.duracaoMeses === 12 ? '1 ano' : `${plano.duracaoMeses}m`}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                   <Text className="text-textPrimary text-lg font-bold">{plano.nome}</Text>
                   {plano.descricao ? (
