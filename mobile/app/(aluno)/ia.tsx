@@ -111,7 +111,12 @@ export default function AlunoIAScreen() {
       const novaLista = existe
         ? conversas.map((c) => (c.id === atualizada.id ? atualizada : c))
         : [atualizada, ...conversas];
-      await salvarConversas(novaLista);
+
+      try {
+        await salvarConversas(novaLista);
+      } catch {
+        // falha no AsyncStorage não deve exibir erro ao usuário
+      }
 
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     },
