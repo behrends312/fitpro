@@ -163,4 +163,33 @@ async function importar(req, res, next) {
   }
 }
 
-module.exports = { listar, getById, criar, atualizar, deletar, importar };
+// POST /exercicios/sync-thumbnails — aplica mapa nome→thumbnailUrl em bulk
+async function syncThumbnails(req, res, next) {
+  try {
+    const { mapa } = req.body; // { "Supino Reto": "https://...", ... }
+    if (!mapa || typeof mapa !== 'object') {
+      return res.status(400).json({ message: 'Campo "mapa" obrigatório.' });
+    }
+
+    let atualizados = 0;
+    const detalhes = [];
+
+    for (const [nome, thumbnailUrl] of Object.entries(mapa)) {
+      const regex = new RegExp(`^${nome.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+      const result = await Exercicio.updateMany(
+        { nome: { $regex: regex } },
+        { $set: { thumbnailUrl } }
+      );
+      if (result.modifiedCount > 0) {
+        atualizados += result.modifiedCount;
+        detalhes.push({ nome, count: result.modifiedCount });
+      }
+    }
+
+    res.json({ message: `${atualizados} exercício(s) atualizado(s).`, detalhes });
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { listar, getById, criar, atualizar, deletar, importar, syncThumbnails };
