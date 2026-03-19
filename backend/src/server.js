@@ -8,7 +8,7 @@ const port = PORT || 3001;
 const server = http.createServer(app);
 
 connectDB(MONGO_URI).then(() => {
-  server.listen(port, () => {
-    console.log(`[server] listening on http://localhost:${port}`);
+  server.listen(port, '0.0.0.0', () => {
+    console.log(`[server] listening on http://0.0.0.0:${port}`);
   });
 });
