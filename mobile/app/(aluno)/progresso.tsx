@@ -679,7 +679,7 @@ export default function ProgressoScreen() {
                   onPress={() =>
                     setEvolucaoSelecionada({ id: pr._id, nome: pr.exercicio.nome })
                   }
-                  className="bg-surface border border-border rounded-2xl p-4 mr-3 active:border-primary"
+                  className="bg-surface border border-border rounded-2xl p-4 mr-3"
                   style={{ width: 160 }}
                 >
                   <View className="bg-primary/10 w-10 h-10 rounded-xl items-center justify-center mb-3">
@@ -719,7 +719,7 @@ export default function ProgressoScreen() {
                 <TouchableOpacity
                   key={sessao._id}
                   onPress={() => setSessaoSelecionada(sessao._id)}
-                  className="bg-surface border border-border rounded-2xl p-4 mb-3 active:border-primary"
+                  className="bg-surface border border-border rounded-2xl p-4 mb-3"
                 >
                   <View className="flex-row justify-between items-center">
                     <View className="flex-1">
