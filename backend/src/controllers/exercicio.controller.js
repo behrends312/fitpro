@@ -1,6 +1,7 @@
 const Exercicio = require('../models/Exercicio');
+const { uploadToR2, deleteFromR2, gerarKey } = require('../middlewares/upload');
 
-// GET /exercicios — lista exercícios disponíveis para o personal (seus + públicos)
+// GET /exercicios
 async function listar(req, res, next) {
   try {
     const { busca, musculo, equipamento, dificuldade, scope } = req.query;
@@ -15,7 +16,6 @@ async function listar(req, res, next) {
     }
 
     const query = { ...baseQuery };
-
     if (busca) query.nome = { $regex: busca, $options: 'i' };
     if (musculo) query.musculosPrincipais = musculo;
     if (equipamento) query.equipamento = equipamento;
@@ -68,12 +68,14 @@ async function criar(req, res, next) {
     };
 
     if (req.files?.video?.[0]) {
-      data.videoPath = req.files.video[0].path;
-      data.videoUrl = `/uploads/videos/${req.files.video[0].filename}`;
+      const f = req.files.video[0];
+      const key = gerarKey('videos', f.originalname);
+      data.videoUrl = await uploadToR2(f.buffer, key, f.mimetype);
     }
     if (req.files?.thumbnail?.[0]) {
-      data.thumbnailPath = req.files.thumbnail[0].path;
-      data.thumbnailUrl = `/uploads/images/${req.files.thumbnail[0].filename}`;
+      const f = req.files.thumbnail[0];
+      const key = gerarKey('images', f.originalname);
+      data.thumbnailUrl = await uploadToR2(f.buffer, key, f.mimetype);
     }
 
     const exercicio = await Exercicio.create(data);
@@ -90,19 +92,22 @@ async function atualizar(req, res, next) {
     if (!exercicio) return res.status(404).json({ message: 'Exercício não encontrado ou sem permissão.' });
 
     const campos = ['nome', 'descricao', 'instrucoes', 'equipamento', 'dificuldade', 'publica'];
-    campos.forEach((c) => {
-      if (req.body[c] !== undefined) exercicio[c] = req.body[c];
-    });
+    campos.forEach((c) => { if (req.body[c] !== undefined) exercicio[c] = req.body[c]; });
     if (req.body.musculosPrincipais) exercicio.musculosPrincipais = JSON.parse(req.body.musculosPrincipais);
     if (req.body.musculosSecundarios) exercicio.musculosSecundarios = JSON.parse(req.body.musculosSecundarios);
 
     if (req.files?.video?.[0]) {
-      exercicio.videoPath = req.files.video[0].path;
-      exercicio.videoUrl = `/uploads/videos/${req.files.video[0].filename}`;
+      // Apaga vídeo antigo do R2
+      if (exercicio.videoUrl) await deleteFromR2(exercicio.videoUrl).catch(() => {});
+      const f = req.files.video[0];
+      const key = gerarKey('videos', f.originalname);
+      exercicio.videoUrl = await uploadToR2(f.buffer, key, f.mimetype);
     }
     if (req.files?.thumbnail?.[0]) {
-      exercicio.thumbnailPath = req.files.thumbnail[0].path;
-      exercicio.thumbnailUrl = `/uploads/images/${req.files.thumbnail[0].filename}`;
+      if (exercicio.thumbnailUrl) await deleteFromR2(exercicio.thumbnailUrl).catch(() => {});
+      const f = req.files.thumbnail[0];
+      const key = gerarKey('images', f.originalname);
+      exercicio.thumbnailUrl = await uploadToR2(f.buffer, key, f.mimetype);
     }
 
     await exercicio.save();
@@ -125,7 +130,7 @@ async function deletar(req, res, next) {
   }
 }
 
-// POST /exercicios/importar — cria exercício se não existir (por nome) para esse personal
+// POST /exercicios/importar
 async function importar(req, res, next) {
   try {
     const { nome, musculosPrincipais, equipamento, dificuldade } = req.body;
