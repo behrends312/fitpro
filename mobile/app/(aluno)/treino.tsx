@@ -341,6 +341,7 @@ export default function TreinoScreen() {
   const queryClient = useQueryClient();
   const [sessaoAtiva, setSessaoAtiva] = useState<Sessao | null>(null);
   const [exercicios, setExercicios] = useState<ExercicioExec[]>([]);
+  const [mostrarTodos, setMostrarTodos] = useState(false);
   const [timerDescanso, setTimerDescanso] = useState<{ eIdx: number; segundos: number } | null>(null);
   const [elapsedSeg, setElapsedSeg] = useState(0);
   const [colapsados, setColapsados] = useState<Set<number>>(new Set());
@@ -608,6 +609,12 @@ export default function TreinoScreen() {
   );
 
   // =============== TELA: Sem sessão ativa ===============
+  const hojeStr = new Date().toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '').slice(0, 3);
+  const diasMap: Record<string, string> = { seg: 'seg', ter: 'ter', qua: 'qua', qui: 'qui', sex: 'sex', sab: 'sáb', dom: 'dom' };
+  const treinosHoje = treinos.filter((t) => t.diasSemana.some((d) => diasMap[d] === hojeStr));
+  const listaExibida = mostrarTodos ? treinos : (treinosHoje.length > 0 ? treinosHoje : treinos);
+  const temOutros = !mostrarTodos && treinosHoje.length > 0 && treinos.length > treinosHoje.length;
+
   if (!sessaoAtiva) {
     return (
       <SafeAreaView className="flex-1 bg-background">
@@ -633,96 +640,119 @@ export default function TreinoScreen() {
                 </Text>
               </View>
             ) : (
-              treinos.map((treino) => {
-                const hojeStr = new Date().toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '').slice(0, 3);
-                const diasMap: Record<string, string> = { seg: 'seg', ter: 'ter', qua: 'qua', qui: 'qui', sex: 'sex', sab: 'sáb', dom: 'dom' };
-                const ehHoje = treino.diasSemana.some((d) => diasMap[d] === hojeStr);
-                const { expirado, diasRestantes, dataExp } = calcularExpiracao(treino);
-                const expirando = !expirado && diasRestantes !== null && diasRestantes <= 7;
+              <>
+                {treinosHoje.length === 0 && (
+                  <View className="bg-surface border border-border rounded-2xl p-4 mb-4 flex-row items-center gap-3">
+                    <Ionicons name="moon-outline" size={20} color="#9090a8" />
+                    <Text className="text-textSecondary text-sm flex-1">Nenhum treino programado para hoje. Mostrando todos.</Text>
+                  </View>
+                )}
+                {listaExibida.map((treino) => {
+                  const ehHoje = treino.diasSemana.some((d) => diasMap[d] === hojeStr);
+                  const { expirado, diasRestantes, dataExp } = calcularExpiracao(treino);
+                  const expirando = !expirado && diasRestantes !== null && diasRestantes <= 7;
 
-                return (
-                  <TouchableOpacity
-                    key={treino._id}
-                    onPress={() => {
-                      if (expirado) {
-                        Alert.alert('Plano expirado', 'Este plano de treino expirou. Fale com seu personal para renová-lo.');
-                        return;
-                      }
-                      Alert.alert(
-                        `Iniciar ${treino.nome}?`,
-                        `${treino.exercicios.length} exercícios`,
-                        [
-                          { text: 'Cancelar', style: 'cancel' },
-                          { text: 'Iniciar', onPress: () => iniciarMutation.mutate(treino._id) },
-                        ]
-                      );
-                    }}
-                    style={{ opacity: expirado ? 0.6 : 1 }}
-                    className="bg-surface border border-border rounded-2xl mb-4 overflow-hidden"
-                  >
-                    {/* Banner expirado / expirando */}
-                    {expirado && (
-                      <View style={{ backgroundColor: 'rgba(248,113,113,0.15)', borderBottomWidth: 1, borderBottomColor: 'rgba(248,113,113,0.3)', paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Ionicons name="alert-circle-outline" size={14} color="#f87171" />
-                        <Text style={{ color: '#f87171', fontSize: 12, fontWeight: '600' }}>
-                          Plano expirado em {dataExp?.toLocaleDateString('pt-BR')} — fale com seu personal
-                        </Text>
-                      </View>
-                    )}
-                    {expirando && (
-                      <View style={{ backgroundColor: 'rgba(251,191,36,0.15)', borderBottomWidth: 1, borderBottomColor: 'rgba(251,191,36,0.3)', paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Ionicons name="time-outline" size={14} color="#fbbf24" />
-                        <Text style={{ color: '#fbbf24', fontSize: 12, fontWeight: '600' }}>
-                          Expira em {diasRestantes} dia{diasRestantes !== 1 ? 's' : ''}
-                        </Text>
-                      </View>
-                    )}
+                  return (
+                    <TouchableOpacity
+                      key={treino._id}
+                      onPress={() => {
+                        if (expirado) {
+                          Alert.alert('Plano expirado', 'Este plano de treino expirou. Fale com seu personal para renová-lo.');
+                          return;
+                        }
+                        Alert.alert(
+                          `Iniciar ${treino.nome}?`,
+                          `${treino.exercicios.length} exercícios`,
+                          [
+                            { text: 'Cancelar', style: 'cancel' },
+                            { text: 'Iniciar', onPress: () => iniciarMutation.mutate(treino._id) },
+                          ]
+                        );
+                      }}
+                      style={{ opacity: expirado ? 0.6 : 1 }}
+                      className="bg-surface border border-border rounded-2xl mb-4 overflow-hidden"
+                    >
+                      {expirado && (
+                        <View style={{ backgroundColor: 'rgba(248,113,113,0.15)', borderBottomWidth: 1, borderBottomColor: 'rgba(248,113,113,0.3)', paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Ionicons name="alert-circle-outline" size={14} color="#f87171" />
+                          <Text style={{ color: '#f87171', fontSize: 12, fontWeight: '600' }}>
+                            Plano expirado em {dataExp?.toLocaleDateString('pt-BR')} — fale com seu personal
+                          </Text>
+                        </View>
+                      )}
+                      {expirando && (
+                        <View style={{ backgroundColor: 'rgba(251,191,36,0.15)', borderBottomWidth: 1, borderBottomColor: 'rgba(251,191,36,0.3)', paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <Ionicons name="time-outline" size={14} color="#fbbf24" />
+                          <Text style={{ color: '#fbbf24', fontSize: 12, fontWeight: '600' }}>
+                            Expira em {diasRestantes} dia{diasRestantes !== 1 ? 's' : ''}
+                          </Text>
+                        </View>
+                      )}
 
-                    <View className="p-5">
-                      <View className="flex-row justify-between items-start mb-3">
-                        <View>
-                          <View className="flex-row items-center gap-2 mb-1">
-                            <View className="bg-primary/20 px-2 py-0.5 rounded-md">
-                              <Text className="text-primary text-xs font-bold">Treino {treino.tipo}</Text>
-                            </View>
-                            {ehHoje && !expirado && (
-                              <View className="bg-success/20 px-2 py-0.5 rounded-md">
-                                <Text className="text-success text-xs font-semibold">Hoje</Text>
+                      <View className="p-5">
+                        <View className="flex-row justify-between items-start mb-3">
+                          <View className="flex-1 pr-3">
+                            <View className="flex-row items-center gap-2 mb-1">
+                              <View className="bg-primary/20 px-2 py-0.5 rounded-md">
+                                <Text className="text-primary text-xs font-bold">Treino {treino.tipo}</Text>
                               </View>
-                            )}
+                              {ehHoje && !expirado && (
+                                <View className="bg-success/20 px-2 py-0.5 rounded-md">
+                                  <Text className="text-success text-xs font-semibold">Hoje</Text>
+                                </View>
+                              )}
+                            </View>
+                            <Text className="text-textPrimary text-xl font-bold">{treino.nome}</Text>
                           </View>
-                          <Text className="text-textPrimary text-xl font-bold">{treino.nome}</Text>
+                          <View style={{ backgroundColor: expirado ? 'rgba(248,113,113,0.1)' : 'rgba(108,99,255,0.1)', padding: 12, borderRadius: 12 }}>
+                            <Ionicons name={expirado ? 'lock-closed-outline' : 'play'} size={22} color={expirado ? '#f87171' : '#6C63FF'} />
+                          </View>
                         </View>
-                        <View style={{ backgroundColor: expirado ? 'rgba(248,113,113,0.1)' : 'rgba(108,99,255,0.1)', padding: 12, borderRadius: 12 }}>
-                          <Ionicons name={expirado ? 'lock-closed-outline' : 'play'} size={22} color={expirado ? '#f87171' : '#6C63FF'} />
-                        </View>
-                      </View>
 
-                      <View className="mb-3">
-                        {treino.exercicios.slice(0, 3).map((ex, i) => (
-                          <Text key={i} className="text-textMuted text-xs mb-0.5">· {ex.exercicio.nome}</Text>
-                        ))}
-                        {treino.exercicios.length > 3 && (
-                          <Text className="text-textMuted text-xs">+{treino.exercicios.length - 3} mais...</Text>
-                        )}
-                      </View>
-
-                      <View className="flex-row gap-4">
-                        <View className="flex-row items-center gap-1">
-                          <Ionicons name="list-outline" size={14} color="#9090a8" />
-                          <Text className="text-textSecondary text-sm">{treino.exercicios.length} exercícios</Text>
+                        <View className="mb-3">
+                          {treino.exercicios.slice(0, 3).map((ex, i) => (
+                            <Text key={i} className="text-textMuted text-xs mb-0.5">· {ex.exercicio.nome}</Text>
+                          ))}
+                          {treino.exercicios.length > 3 && (
+                            <Text className="text-textMuted text-xs">+{treino.exercicios.length - 3} mais...</Text>
+                          )}
                         </View>
-                        {treino.diasSemana.length > 0 && (
+
+                        <View className="flex-row gap-4">
                           <View className="flex-row items-center gap-1">
-                            <Ionicons name="calendar-outline" size={14} color="#9090a8" />
-                            <Text className="text-textSecondary text-sm">{treino.diasSemana.join(', ')}</Text>
+                            <Ionicons name="list-outline" size={14} color="#9090a8" />
+                            <Text className="text-textSecondary text-sm">{treino.exercicios.length} exercícios</Text>
                           </View>
-                        )}
+                          {treino.diasSemana.length > 0 && (
+                            <View className="flex-row items-center gap-1">
+                              <Ionicons name="calendar-outline" size={14} color="#9090a8" />
+                              <Text className="text-textSecondary text-sm">{treino.diasSemana.join(', ')}</Text>
+                            </View>
+                          )}
+                        </View>
                       </View>
-                    </View>
+                    </TouchableOpacity>
+                  );
+                })}
+                {temOutros && (
+                  <TouchableOpacity
+                    onPress={() => setMostrarTodos(true)}
+                    className="border border-border rounded-2xl py-4 items-center mb-4 flex-row justify-center gap-2"
+                  >
+                    <Ionicons name="list-outline" size={16} color="#9090a8" />
+                    <Text className="text-textSecondary text-sm">Ver todos os treinos ({treinos.length})</Text>
                   </TouchableOpacity>
-                );
-              })
+                )}
+                {mostrarTodos && treinosHoje.length > 0 && (
+                  <TouchableOpacity
+                    onPress={() => setMostrarTodos(false)}
+                    className="border border-border rounded-2xl py-4 items-center mb-4 flex-row justify-center gap-2"
+                  >
+                    <Ionicons name="today-outline" size={16} color="#9090a8" />
+                    <Text className="text-textSecondary text-sm">Mostrar só treinos de hoje</Text>
+                  </TouchableOpacity>
+                )}
+              </>
             )}
           </View>
         </ScrollView>
@@ -869,7 +899,7 @@ export default function TreinoScreen() {
                 <View className="flex-1">
                   {grupoTipo && (
                     <View style={{ backgroundColor: grupoCor + '20' }} className="self-start px-2 py-0.5 rounded-md mb-1">
-                      <Text style={{ color: grupoCor }} className="text-xs font-bold uppercase">
+                      <Text style={{ color: grupoCor ?? undefined }} className="text-xs font-bold uppercase">
                         {grupoTipo} · Ex {(ex.grupoOrdem ?? 0) + 1}
                       </Text>
                     </View>
