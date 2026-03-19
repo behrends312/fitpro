@@ -430,6 +430,13 @@ export default function TreinoScreen() {
     retry: 0,
   });
 
+  // Última sessão concluída para determinar próximo treino na sequência
+  const { data: ultimaSessaoData } = useQuery({
+    queryKey: ['ultima-sessao'],
+    queryFn: () => api.get('/sessoes/historico', { params: { limit: 1 } }).then((r) => r.data),
+    retry: 0,
+  });
+
   useEffect(() => {
     if (sessaoAtivaDados) {
       setSessaoAtiva(sessaoAtivaDados);
@@ -530,7 +537,7 @@ export default function TreinoScreen() {
     onSuccess: (response: any) => {
       setSessaoAtiva(null);
       setExercicios([]);
-      queryClient.invalidateQueries({ queryKey: ['treinos-aluno', 'sessao-ativa', 'sessoes-semana', 'meu-perfil'] });
+      queryClient.invalidateQueries({ queryKey: ['treinos-aluno', 'sessao-ativa', 'sessoes-semana', 'meu-perfil', 'ultima-sessao'] });
 
       if (response?.data?.gamificacao) {
         setGamiResultado(response.data.gamificacao);
@@ -609,11 +616,17 @@ export default function TreinoScreen() {
   );
 
   // =============== TELA: Sem sessão ativa ===============
-  const hojeStr = new Date().toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '').slice(0, 3);
-  const diasMap: Record<string, string> = { seg: 'seg', ter: 'ter', qua: 'qua', qui: 'qui', sex: 'sex', sab: 'sáb', dom: 'dom' };
-  const treinosHoje = treinos.filter((t) => t.diasSemana.some((d) => diasMap[d] === hojeStr));
-  const listaExibida = mostrarTodos ? treinos : (treinosHoje.length > 0 ? treinosHoje : treinos);
-  const temOutros = !mostrarTodos && treinosHoje.length > 0 && treinos.length > treinosHoje.length;
+  // Sequência A→B→C→A: ordena treinos por tipo e determina o próximo com base no último concluído
+  const tiposOrdenados = [...new Set(treinos.map((t) => t.tipo))].sort();
+  const ultimoTipo = ultimaSessaoData?.sessoes?.[0]?.treino?.tipo ?? null;
+  const proximoTipo = (() => {
+    if (!ultimoTipo || !tiposOrdenados.includes(ultimoTipo)) return tiposOrdenados[0] ?? null;
+    const idx = tiposOrdenados.indexOf(ultimoTipo);
+    return tiposOrdenados[(idx + 1) % tiposOrdenados.length];
+  })();
+  const treinosOrdenados = [...treinos].sort((a, b) => a.tipo.localeCompare(b.tipo));
+  const listaExibida = mostrarTodos ? treinosOrdenados : treinosOrdenados.filter((t) => t.tipo === proximoTipo);
+  const temOutros = !mostrarTodos && treinos.length > listaExibida.length;
 
   if (!sessaoAtiva) {
     return (
@@ -641,14 +654,8 @@ export default function TreinoScreen() {
               </View>
             ) : (
               <>
-                {treinosHoje.length === 0 && (
-                  <View className="bg-surface border border-border rounded-2xl p-4 mb-4 flex-row items-center gap-3">
-                    <Ionicons name="moon-outline" size={20} color="#9090a8" />
-                    <Text className="text-textSecondary text-sm flex-1">Nenhum treino programado para hoje. Mostrando todos.</Text>
-                  </View>
-                )}
                 {listaExibida.map((treino) => {
-                  const ehHoje = treino.diasSemana.some((d) => diasMap[d] === hojeStr);
+                  const ehProximo = treino.tipo === proximoTipo;
                   const { expirado, diasRestantes, dataExp } = calcularExpiracao(treino);
                   const expirando = !expirado && diasRestantes !== null && diasRestantes <= 7;
 
@@ -696,9 +703,9 @@ export default function TreinoScreen() {
                               <View className="bg-primary/20 px-2 py-0.5 rounded-md">
                                 <Text className="text-primary text-xs font-bold">Treino {treino.tipo}</Text>
                               </View>
-                              {ehHoje && !expirado && (
+                              {ehProximo && !expirado && (
                                 <View className="bg-success/20 px-2 py-0.5 rounded-md">
-                                  <Text className="text-success text-xs font-semibold">Hoje</Text>
+                                  <Text className="text-success text-xs font-semibold">Próximo</Text>
                                 </View>
                               )}
                             </View>
@@ -723,12 +730,6 @@ export default function TreinoScreen() {
                             <Ionicons name="list-outline" size={14} color="#9090a8" />
                             <Text className="text-textSecondary text-sm">{treino.exercicios.length} exercícios</Text>
                           </View>
-                          {treino.diasSemana.length > 0 && (
-                            <View className="flex-row items-center gap-1">
-                              <Ionicons name="calendar-outline" size={14} color="#9090a8" />
-                              <Text className="text-textSecondary text-sm">{treino.diasSemana.join(', ')}</Text>
-                            </View>
-                          )}
                         </View>
                       </View>
                     </TouchableOpacity>
@@ -743,13 +744,13 @@ export default function TreinoScreen() {
                     <Text className="text-textSecondary text-sm">Ver todos os treinos ({treinos.length})</Text>
                   </TouchableOpacity>
                 )}
-                {mostrarTodos && treinosHoje.length > 0 && (
+                {mostrarTodos && (
                   <TouchableOpacity
                     onPress={() => setMostrarTodos(false)}
                     className="border border-border rounded-2xl py-4 items-center mb-4 flex-row justify-center gap-2"
                   >
-                    <Ionicons name="today-outline" size={16} color="#9090a8" />
-                    <Text className="text-textSecondary text-sm">Mostrar só treinos de hoje</Text>
+                    <Ionicons name="arrow-back-outline" size={16} color="#9090a8" />
+                    <Text className="text-textSecondary text-sm">Mostrar próximo treino</Text>
                   </TouchableOpacity>
                 )}
               </>
