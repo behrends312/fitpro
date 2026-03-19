@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import NetInfo from '@react-native-community/netinfo';
 import * as Haptics from 'expo-haptics';
+import { Image } from 'react-native';
 import { Video, ResizeMode } from 'expo-av';
 import api from '../../src/services/api';
 import * as Offline from '../../src/services/offline';
@@ -19,7 +20,7 @@ interface SerieExec {
   completada: boolean;
 }
 interface ExercicioExec {
-  exercicio: { _id: string; nome: string; musculosPrincipais: string[]; videoUrl?: string };
+  exercicio: { _id: string; nome: string; musculosPrincipais: string[]; videoUrl?: string; thumbnailUrl?: string };
   series: SerieExec[];
   grupoTipo?: string;
   grupoId?: string | null;
@@ -347,6 +348,7 @@ export default function TreinoScreen() {
   const [colapsados, setColapsados] = useState<Set<number>>(new Set());
   const [isOnline, setIsOnline] = useState(true);
   const [videoAtivo, setVideoAtivo] = useState<string | null>(null);
+  const [gifAtivo, setGifAtivo] = useState<string | null>(null);
   const [gamiResultado, setGamiResultado] = useState<GamificacaoResultado | null>(null);
   const isOnlineRef = useRef(true);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -869,6 +871,18 @@ export default function TreinoScreen() {
         </View>
       </Modal>
 
+      {/* Modal de GIF do exercício */}
+      <Modal visible={!!gifAtivo} transparent animationType="fade" onRequestClose={() => setGifAtivo(null)}>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center' }}>
+          <TouchableOpacity onPress={() => setGifAtivo(null)} style={{ position: 'absolute', top: 56, right: 20, zIndex: 10 }}>
+            <Ionicons name="close-circle" size={36} color="white" />
+          </TouchableOpacity>
+          {gifAtivo && (
+            <Image source={{ uri: gifAtivo }} style={{ width: '100%', height: 280 }} resizeMode="contain" />
+          )}
+        </View>
+      </Modal>
+
       <ScrollView className="flex-1 px-5 pt-4" keyboardShouldPersistTaps="handled">
         {exercicios.map((ex, eIdx) => {
           const feitos = ex.series.filter((s) => s.completada).length;
@@ -927,6 +941,15 @@ export default function TreinoScreen() {
                     >
                       <Ionicons name="play-circle-outline" size={20} color="#6C63FF" />
                       <Text className="text-primary text-sm font-semibold">Ver vídeo do exercício</Text>
+                    </TouchableOpacity>
+                  )}
+                  {!ex.exercicio.videoUrl && ex.exercicio.thumbnailUrl && (
+                    <TouchableOpacity
+                      onPress={() => setGifAtivo(ex.exercicio.thumbnailUrl!)}
+                      className="flex-row items-center gap-2 mb-3 bg-primary/10 border border-primary/30 rounded-xl px-4 py-2.5"
+                    >
+                      <Ionicons name="image-outline" size={20} color="#6C63FF" />
+                      <Text className="text-primary text-sm font-semibold">Ver demonstração</Text>
                     </TouchableOpacity>
                   )}
                   <View className="flex-row items-center px-4 mb-2">

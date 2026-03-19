@@ -38,6 +38,7 @@ function ModalNovoExercicio({ visivel, onFechar }: { visivel: boolean; onFechar:
   const [dificuldade, setDificuldade] = useState('intermediario');
   const [publica, setPublica] = useState(false);
   const [videoUri, setVideoUri] = useState<string | null>(null);
+  const [gifUri, setGifUri] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const criarMutation = useMutation({
@@ -52,21 +53,27 @@ function ModalNovoExercicio({ visivel, onFechar }: { visivel: boolean; onFechar:
       formData.append('dificuldade', dificuldade);
       formData.append('publica', String(publica));
       if (videoUri) formData.append('video', { uri: videoUri, type: 'video/mp4', name: 'exercicio.mp4' });
+      if (gifUri) formData.append('thumbnail', { uri: gifUri, type: 'image/gif', name: 'exercicio.gif' });
       return api.post('/exercicios', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['exercicios'] });
       onFechar();
       setNome(''); setDescricao(''); setInstrucoes('');
-      setMusculosSel([]); setVideoUri(null);
+      setMusculosSel([]); setVideoUri(null); setGifUri(null);
       Alert.alert('Exercício criado!', 'Já disponível na sua biblioteca.');
     },
     onError: (err: any) => Alert.alert('Erro', err?.response?.data?.message || 'Erro ao criar exercício.'),
   });
 
+  async function selecionarGif() {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] as any, quality: 1 });
+    if (!result.canceled) { setGifUri(result.assets[0].uri); setVideoUri(null); }
+  }
+
   async function selecionarVideo() {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Videos, quality: 0.8 });
-    if (!result.canceled) setVideoUri(result.assets[0].uri);
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['videos'] as any, quality: 0.8 });
+    if (!result.canceled) { setVideoUri(result.assets[0].uri); setGifUri(null); }
   }
 
   function toggleMusculo(m: string) {
@@ -148,11 +155,17 @@ function ModalNovoExercicio({ visivel, onFechar }: { visivel: boolean; onFechar:
                 ))}
               </View>
 
-              <Text className="text-textSecondary text-xs font-semibold mb-2 uppercase tracking-widest">Vídeo demonstrativo</Text>
-              <TouchableOpacity onPress={selecionarVideo} className="bg-background border border-border rounded-xl p-4 items-center mb-2">
-                <Ionicons name="folder-outline" size={24} color="#6C63FF" />
-                <Text className="text-textSecondary text-xs mt-2">{videoUri ? 'Vídeo selecionado ✓' : 'Selecionar da galeria'}</Text>
-              </TouchableOpacity>
+              <Text className="text-textSecondary text-xs font-semibold mb-2 uppercase tracking-widest">Demonstração (GIF ou Vídeo)</Text>
+              <View className="flex-row gap-3 mb-2">
+                <TouchableOpacity onPress={selecionarGif} className={`flex-1 border rounded-xl p-3 items-center ${gifUri ? 'bg-primary/10 border-primary' : 'bg-background border-border'}`}>
+                  <Ionicons name="image-outline" size={22} color={gifUri ? '#6C63FF' : '#9090a8'} />
+                  <Text className={`text-xs mt-1 font-semibold ${gifUri ? 'text-primary' : 'text-textSecondary'}`}>{gifUri ? 'GIF ✓' : 'GIF'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={selecionarVideo} className={`flex-1 border rounded-xl p-3 items-center ${videoUri ? 'bg-primary/10 border-primary' : 'bg-background border-border'}`}>
+                  <Ionicons name="videocam-outline" size={22} color={videoUri ? '#6C63FF' : '#9090a8'} />
+                  <Text className={`text-xs mt-1 font-semibold ${videoUri ? 'text-primary' : 'text-textSecondary'}`}>{videoUri ? 'Vídeo ✓' : 'Vídeo'}</Text>
+                </TouchableOpacity>
+              </View>
 
               <View className="flex-row items-center justify-between py-3 border-t border-border mt-2 mb-4">
                 <View>
