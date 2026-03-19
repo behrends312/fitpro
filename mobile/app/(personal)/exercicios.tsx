@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, TextInput, Modal,
+  View, Text, ScrollView, TouchableOpacity, TextInput, Modal, Image,
   Alert, ActivityIndicator, FlatList, SectionList, Switch, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -241,7 +241,7 @@ export default function ExerciciosScreen() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['exercicios'] }),
   });
 
-  async function importarExercicio(ex: { nome: string; musculosPrincipais: string[]; equipamento: string; dificuldade: string }) {
+  async function importarExercicio(ex: { nome: string; musculosPrincipais: string[]; equipamento: string; dificuldade: string; gifUrl?: string }) {
     setImportando(ex.nome);
     try {
       await api.post('/exercicios/importar', ex);
@@ -396,24 +396,29 @@ export default function ExerciciosScreen() {
             style={{ flex: 1 }}
             contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20 }}
             renderItem={({ item: ex }) => (
-              <View className="bg-surface border border-border rounded-2xl p-4 mb-3 flex-row items-center">
-                <View className="flex-1">
-                  <Text className="text-textPrimary font-bold text-base">{ex.nome}</Text>
-                  <Text className="text-textMuted text-xs mt-0.5">
-                    {ex.musculosPrincipais.join(' · ')} · {ex.equipamento.replace('_', ' ')}
-                  </Text>
+              <View className="bg-surface border border-border rounded-2xl mb-3 overflow-hidden">
+                {ex.gifUrl && (
+                  <Image source={{ uri: ex.gifUrl }} style={{ width: '100%', height: 160 }} resizeMode="cover" />
+                )}
+                <View className="flex-row items-center p-4">
+                  <View className="flex-1">
+                    <Text className="text-textPrimary font-bold text-base">{ex.nome}</Text>
+                    <Text className="text-textMuted text-xs mt-0.5">
+                      {ex.musculosPrincipais.join(' · ')} · {ex.equipamento.replace('_', ' ')}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => importarExercicio(ex)}
+                    disabled={importando === ex.nome}
+                    className="bg-primary/10 border border-primary/30 px-3 py-1.5 rounded-lg ml-3"
+                  >
+                    {importando === ex.nome ? (
+                      <ActivityIndicator color="#6C63FF" size="small" />
+                    ) : (
+                      <Text className="text-primary text-xs font-semibold">+ Biblioteca</Text>
+                    )}
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  onPress={() => importarExercicio(ex)}
-                  disabled={importando === ex.nome}
-                  className="bg-primary/10 border border-primary/30 px-3 py-1.5 rounded-lg ml-3"
-                >
-                  {importando === ex.nome ? (
-                    <ActivityIndicator color="#6C63FF" size="small" />
-                  ) : (
-                    <Text className="text-primary text-xs font-semibold">+ Biblioteca</Text>
-                  )}
-                </TouchableOpacity>
               </View>
             )}
           />

@@ -176,7 +176,7 @@ export default function IATreinoScreen() {
       api.post('/ia/chat', {
         mensagens: msgs.map((m) => ({ role: m.role, content: m.content })),
         contexto: 'personal',
-      }).then((r) => r.data.resposta as string),
+      }, { timeout: 60000 }).then((r) => r.data.resposta as string),
     onSuccess: (resposta) => {
       const nova: Mensagem = { id: gerarId(), role: 'model', content: resposta };
       const novasMensagens = [...(conversaAtual?.mensagens ?? []), nova];

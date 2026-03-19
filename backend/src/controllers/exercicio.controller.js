@@ -133,7 +133,7 @@ async function deletar(req, res, next) {
 // POST /exercicios/importar
 async function importar(req, res, next) {
   try {
-    const { nome, musculosPrincipais, equipamento, dificuldade } = req.body;
+    const { nome, musculosPrincipais, equipamento, dificuldade, gifUrl } = req.body;
     if (!nome) return res.status(400).json({ message: 'Nome é obrigatório.' });
 
     let exercicio = await Exercicio.findOne({
@@ -150,7 +150,11 @@ async function importar(req, res, next) {
         dificuldade: dificuldade || 'intermediario',
         criadoPor: req.user.id,
         publica: false,
+        ...(gifUrl ? { thumbnailUrl: gifUrl } : {}),
       });
+    } else if (gifUrl && !exercicio.thumbnailUrl) {
+      exercicio.thumbnailUrl = gifUrl;
+      await exercicio.save();
     }
 
     res.json(exercicio);

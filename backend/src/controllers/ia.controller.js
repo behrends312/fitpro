@@ -83,7 +83,7 @@ async function chat(req, res, next) {
 
     const response = await client.messages.create({
       model: MODEL,
-      max_tokens: 2048,
+      max_tokens: contexto === 'personal' ? 8192 : 2048,
       system,
       messages,
     });

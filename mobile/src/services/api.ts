@@ -8,9 +8,19 @@ export const api = axios.create({
   timeout: 15000,
 });
 
+// Cache em memória do token — evita chamar SecureStore a cada request
+let cachedToken: string | null = null;
+
+export function setTokenCache(token: string | null) {
+  cachedToken = token;
+}
+
+// Carrega o token uma vez na inicialização
+SecureStore.getItemAsync('token').then((t) => { cachedToken = t; });
+
 // Injeta o token em todas as requisições
 api.interceptors.request.use(async (config) => {
-  const token = await SecureStore.getItemAsync('token');
+  const token = cachedToken ?? await SecureStore.getItemAsync('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -22,6 +32,7 @@ api.interceptors.response.use(
   (res) => res,
   async (error) => {
     if (error.response?.status === 401) {
+      cachedToken = null;
       await SecureStore.deleteItemAsync('token');
       await SecureStore.deleteItemAsync('user');
     }

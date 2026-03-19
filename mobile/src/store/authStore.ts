@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import * as SecureStore from 'expo-secure-store';
-import api from '../services/api';
+import api, { setTokenCache } from '../services/api';
 
 export type UserRole = 'aluno' | 'personal' | 'admin';
 
@@ -33,6 +33,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   login: async (email, password) => {
     const { data } = await api.post('/auth/login', { email, password });
+    setTokenCache(data.token);
     await SecureStore.setItemAsync('token', data.token);
     await SecureStore.setItemAsync('user', JSON.stringify(data.user));
     set({ user: data.user, token: data.token, isAuthenticated: true });
@@ -40,12 +41,14 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   register: async (email, password, role, nome = '') => {
     const { data } = await api.post('/auth/register', { email, password, role, nome });
+    setTokenCache(data.token);
     await SecureStore.setItemAsync('token', data.token);
     await SecureStore.setItemAsync('user', JSON.stringify(data.user));
     set({ user: data.user, token: data.token, isAuthenticated: true });
   },
 
   logout: async () => {
+    setTokenCache(null);
     await SecureStore.deleteItemAsync('token');
     await SecureStore.deleteItemAsync('user');
     set({ user: null, token: null, isAuthenticated: false });
@@ -56,6 +59,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const token = await SecureStore.getItemAsync('token');
       const userStr = await SecureStore.getItemAsync('user');
       if (token && userStr) {
+        setTokenCache(token);
         set({ user: JSON.parse(userStr), token, isAuthenticated: true });
       }
     } finally {

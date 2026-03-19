@@ -2,7 +2,7 @@ require('dotenv').config();
 
 module.exports = {
   NODE_ENV: process.env.NODE_ENV || 'development',
-  PORT: parseInt(process.env.PORT, 10) || 3001,
+  PORT: parseInt(process.env.PORT, 10) || 3000,
   CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
   MONGO_URI: process.env.MONGO_URI || 'mongodb://localhost:27017/athlio',
   JWT_SECRET: process.env.JWT_SECRET || 'athlio-secret-change-in-production',

@@ -95,7 +95,7 @@ export default function AlunoIAScreen() {
       api.post('/ia/chat', {
         mensagens: msgs.map((m) => ({ role: m.role, content: m.content })),
         contexto: 'aluno',
-      }).then((r) => r.data.resposta as string),
+      }, { timeout: 60000 }).then((r) => r.data.resposta as string),
     onSuccess: async (resposta) => {
       const nova: Mensagem = { id: gerarId(), role: 'model', content: resposta };
       const novasMensagens = [...(conversaAtual?.mensagens ?? []), nova];
@@ -111,12 +111,12 @@ export default function AlunoIAScreen() {
       const novaLista = existe
         ? conversas.map((c) => (c.id === atualizada.id ? atualizada : c))
         : [atualizada, ...conversas];
-      await salvarConversas(novaLista);
+      salvarConversas(novaLista); // fire-and-forget — AsyncStorage failure não dispara onError
 
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     },
-    onError: () =>
-      Alert.alert('Erro', 'Falha ao comunicar com a IA. Tente novamente.'),
+    onError: (err: any) =>
+      Alert.alert('Erro', err?.response?.data?.message || 'Falha ao comunicar com a IA. Tente novamente.'),
   });
 
   const enviar = useCallback(async (texto?: string) => {
