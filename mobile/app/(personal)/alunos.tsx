@@ -96,11 +96,23 @@ function TagSim({ label, ativo }: { label: string; ativo: boolean }) {
   );
 }
 
-function ModalAnamnese({ alunoId, nomeAluno, onFechar }: { alunoId: string | null; nomeAluno: string; onFechar: () => void }) {
+function ModalDetalheAluno({
+  aluno,
+  onFechar,
+  onEditar,
+  onRemover,
+  onVerTreinos,
+}: {
+  aluno: Aluno | null;
+  onFechar: () => void;
+  onEditar: (a: Aluno) => void;
+  onRemover: (a: Aluno) => void;
+  onVerTreinos: (a: Aluno) => void;
+}) {
   const { data, isLoading } = useQuery<AnamneseData>({
-    queryKey: ['anamnese', alunoId],
-    queryFn: () => api.get(`/users/alunos/${alunoId}/anamnese`).then((r) => r.data),
-    enabled: !!alunoId,
+    queryKey: ['anamnese', aluno?._id],
+    queryFn: () => api.get(`/users/alunos/${aluno!._id}/anamnese`).then((r) => r.data),
+    enabled: !!aluno,
     staleTime: 0,
   });
 
@@ -112,76 +124,172 @@ function ModalAnamnese({ alunoId, nomeAluno, onFechar }: { alunoId: string | nul
     return `${Math.floor(diff / (1000 * 60 * 60 * 24 * 365))} anos`;
   }
 
+  if (!aluno) return null;
+
   return (
-    <Modal visible={!!alunoId} transparent animationType="slide" onRequestClose={onFechar}>
+    <Modal visible={!!aluno} transparent animationType="slide" onRequestClose={onFechar}>
       <View className="flex-1 bg-black/70 justify-end">
-        <View className="bg-surface rounded-t-3xl" style={{ maxHeight: '90%' }}>
+        <View className="bg-surface rounded-t-3xl" style={{ maxHeight: '92%' }}>
+
+          {/* Header */}
           <View className="px-6 pt-6 pb-4 flex-row justify-between items-center border-b border-border">
-            <View>
-              <Text className="text-textPrimary text-xl font-bold">Anamnese</Text>
-              <Text className="text-textSecondary text-sm">{nomeAluno}</Text>
+            <View className="flex-row items-center gap-3 flex-1">
+              <View className="w-12 h-12 rounded-2xl bg-primary/20 items-center justify-center">
+                <Text className="text-primary font-bold text-lg">
+                  {(aluno.nome || aluno.email)[0].toUpperCase()}
+                </Text>
+              </View>
+              <View className="flex-1">
+                <Text className="text-textPrimary text-lg font-bold">{aluno.nome || 'Sem nome'}</Text>
+                <Text className="text-textMuted text-xs">{aluno.email}</Text>
+              </View>
             </View>
-            <TouchableOpacity onPress={onFechar}>
+            <TouchableOpacity onPress={onFechar} className="ml-2">
               <Ionicons name="close" size={24} color="#9090a8" />
             </TouchableOpacity>
           </View>
 
-          {isLoading ? (
-            <ActivityIndicator color="#6C63FF" style={{ marginVertical: 40 }} />
-          ) : !data?.anamneseConcluida ? (
-            <View className="items-center py-12 px-6">
-              <Ionicons name="clipboard-outline" size={48} color="#2e2e40" />
-              <Text className="text-textSecondary text-center mt-4">
-                Este aluno ainda não preencheu a anamnese.
-              </Text>
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 32 }}>
+
+            {/* Infos básicas */}
+            <View className="px-6 pt-5">
+              <Text className="text-primary text-xs font-bold uppercase tracking-widest mb-3">Informações</Text>
+              <View className="flex-row flex-wrap gap-x-6 gap-y-3 mb-4">
+                {aluno.telefone ? (
+                  <View>
+                    <Text className="text-textMuted text-xs mb-0.5">WhatsApp</Text>
+                    <Text className="text-textPrimary text-sm font-semibold">{aluno.telefone}</Text>
+                  </View>
+                ) : null}
+                {aluno.objetivo ? (
+                  <View>
+                    <Text className="text-textMuted text-xs mb-0.5">Objetivo</Text>
+                    <Text className="text-textPrimary text-sm font-semibold">{aluno.objetivo}</Text>
+                  </View>
+                ) : null}
+                {aluno.peso ? (
+                  <View>
+                    <Text className="text-textMuted text-xs mb-0.5">Peso</Text>
+                    <Text className="text-textPrimary text-sm font-semibold">{aluno.peso} kg</Text>
+                  </View>
+                ) : null}
+                {aluno.altura ? (
+                  <View>
+                    <Text className="text-textMuted text-xs mb-0.5">Altura</Text>
+                    <Text className="text-textPrimary text-sm font-semibold">{aluno.altura} cm</Text>
+                  </View>
+                ) : null}
+                {data?.dataNascimento ? (
+                  <View>
+                    <Text className="text-textMuted text-xs mb-0.5">Idade</Text>
+                    <Text className="text-textPrimary text-sm font-semibold">{calcularIdade(data.dataNascimento)}</Text>
+                  </View>
+                ) : null}
+              </View>
             </View>
-          ) : (
-            <ScrollView className="px-6 py-4" showsVerticalScrollIndicator={false}>
-              {/* Dados físicos */}
-              <Text className="text-primary text-xs font-bold uppercase tracking-widest mb-3">Dados físicos</Text>
-              <View className="flex-row flex-wrap mb-4">
-                {data.peso && <View className="mr-4 mb-2"><Text className="text-textMuted text-xs">Peso</Text><Text className="text-textPrimary font-bold">{data.peso} kg</Text></View>}
-                {data.altura && <View className="mr-4 mb-2"><Text className="text-textMuted text-xs">Altura</Text><Text className="text-textPrimary font-bold">{data.altura} cm</Text></View>}
-                {data.dataNascimento && <View className="mr-4 mb-2"><Text className="text-textMuted text-xs">Idade</Text><Text className="text-textPrimary font-bold">{calcularIdade(data.dataNascimento)}</Text></View>}
-                {data.objetivo && <View className="mr-4 mb-2"><Text className="text-textMuted text-xs">Objetivo</Text><Text className="text-textPrimary font-bold">{data.objetivo}</Text></View>}
-              </View>
 
-              {/* Histórico */}
-              <Text className="text-primary text-xs font-bold uppercase tracking-widest mb-3">Histórico de treino</Text>
-              <LinhaInfo label="Tempo treinando" valor={TEMPO_LABELS[a?.tempoTreinando || ''] || null} />
-              <LinhaInfo label="Frequência semanal" valor={a?.frequenciaSemanal ? `${a.frequenciaSemanal}× por semana` : null} />
-              <LinhaInfo label="Nível de atividade" valor={NIVEL_LABELS[a?.nivelAtividade || ''] || null} />
-              <LinhaInfo label="Profissão sedentária" valor={a?.profissaoSedentaria != null ? (a.profissaoSedentaria ? 'Sim' : 'Não') : null} />
-
-              {/* Saúde */}
-              <Text className="text-primary text-xs font-bold uppercase tracking-widest mb-3 mt-2">Saúde</Text>
-              <View className="flex-row flex-wrap mb-2">
-                <TagSim label="Prob. cardíacos" ativo={!!a?.problemasCardiacos} />
-                <TagSim label="Medicamentos" ativo={!!a?.usaMedicamentos} />
-                <TagSim label="Fumante" ativo={!!a?.fumante} />
-              </View>
-              <LinhaInfo label="Doenças crônicas" valor={a?.doencasCronicas || null} />
-              <LinhaInfo label="Medicamentos" valor={a?.usaMedicamentos ? a.medicamentos : null} />
-              <LinhaInfo label="Consumo de álcool" valor={ALCOOL_LABELS[a?.consumoAlcool || ''] || null} />
-
-              {/* Lesões */}
-              <Text className="text-primary text-xs font-bold uppercase tracking-widest mb-3 mt-2">Lesões e Limitações</Text>
-              <LinhaInfo label="Lesão atual" valor={a?.temLesaoAtual ? (a.lesaoAtual || 'Sim — sem descrição') : 'Nenhuma'} />
-              <LinhaInfo label="Lesão anterior" valor={a?.temLesaoPassada ? (a.lesaoPassada || 'Sim — sem descrição') : 'Nenhuma'} />
-              <LinhaInfo label="Limitação física" valor={a?.temLimitacaoFisica ? (a.limitacaoFisica || 'Sim — sem descrição') : 'Nenhuma'} />
-              <LinhaInfo label="Deficiência" valor={a?.temDeficiencia ? (a.deficiencia || 'Sim — sem descrição') : 'Nenhuma'} />
-
-              {/* Observações */}
-              {a?.observacoes ? (
-                <>
-                  <Text className="text-primary text-xs font-bold uppercase tracking-widest mb-3 mt-2">Observações</Text>
-                  <Text className="text-textPrimary text-sm leading-5">{a.observacoes}</Text>
-                </>
+            {/* Ações rápidas */}
+            <View className="px-6 mb-5 flex-row gap-2">
+              <TouchableOpacity
+                onPress={() => { onFechar(); onVerTreinos(aluno); }}
+                className="flex-1 bg-primary/10 py-3 rounded-xl items-center"
+              >
+                <Ionicons name="clipboard-outline" size={18} color="#6C63FF" />
+                <Text className="text-primary text-xs font-semibold mt-1">Ver treinos</Text>
+              </TouchableOpacity>
+              {aluno.telefone ? (
+                <TouchableOpacity
+                  onPress={() => enviarWhatsApp(aluno.nome, aluno.email, '••••••', aluno.telefone)}
+                  className="flex-1 bg-green-500/10 py-3 rounded-xl items-center"
+                >
+                  <Ionicons name="logo-whatsapp" size={18} color="#22c55e" />
+                  <Text className="text-green-400 text-xs font-semibold mt-1">WhatsApp</Text>
+                </TouchableOpacity>
               ) : null}
+              <TouchableOpacity
+                onPress={() => { onFechar(); onEditar(aluno); }}
+                className="flex-1 bg-surface border border-border py-3 rounded-xl items-center"
+              >
+                <Ionicons name="pencil-outline" size={18} color="#9090a8" />
+                <Text className="text-textSecondary text-xs font-semibold mt-1">Editar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => { onFechar(); onRemover(aluno); }}
+                className="flex-1 bg-red-500/10 py-3 rounded-xl items-center"
+              >
+                <Ionicons name="trash-outline" size={18} color="#f87171" />
+                <Text className="text-red-400 text-xs font-semibold mt-1">Remover</Text>
+              </TouchableOpacity>
+            </View>
 
-              <View className="h-8" />
-            </ScrollView>
-          )}
+            {/* Separador anamnese */}
+            <View className="mx-6 border-t border-border mb-5" />
+            <View className="px-6">
+              <Text className="text-primary text-xs font-bold uppercase tracking-widest mb-4">Anamnese</Text>
+            </View>
+
+            {isLoading ? (
+              <ActivityIndicator color="#6C63FF" style={{ marginVertical: 24 }} />
+            ) : !data?.anamneseConcluida ? (
+              <View className="items-center py-8 px-6">
+                <Ionicons name="clipboard-outline" size={40} color="#2e2e40" />
+                <Text className="text-textSecondary text-center mt-3 text-sm">
+                  Este aluno ainda não preencheu a anamnese.
+                </Text>
+              </View>
+            ) : (
+              <View className="px-6">
+                {/* Dados físicos da anamnese */}
+                <View className="flex-row flex-wrap gap-x-6 gap-y-3 mb-5">
+                  <View>
+                    <Text className="text-textMuted text-xs mb-0.5">Tempo treinando</Text>
+                    <Text className="text-textPrimary text-sm font-semibold">{TEMPO_LABELS[a?.tempoTreinando || ''] || '—'}</Text>
+                  </View>
+                  {a?.frequenciaSemanal ? (
+                    <View>
+                      <Text className="text-textMuted text-xs mb-0.5">Frequência</Text>
+                      <Text className="text-textPrimary text-sm font-semibold">{a.frequenciaSemanal}× por semana</Text>
+                    </View>
+                  ) : null}
+                  <View>
+                    <Text className="text-textMuted text-xs mb-0.5">Nível de atividade</Text>
+                    <Text className="text-textPrimary text-sm font-semibold">{NIVEL_LABELS[a?.nivelAtividade || ''] || '—'}</Text>
+                  </View>
+                  {a?.profissaoSedentaria != null ? (
+                    <View>
+                      <Text className="text-textMuted text-xs mb-0.5">Profissão sedentária</Text>
+                      <Text className="text-textPrimary text-sm font-semibold">{a.profissaoSedentaria ? 'Sim' : 'Não'}</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {/* Alertas de saúde */}
+                <Text className="text-textMuted text-xs font-semibold uppercase tracking-widest mb-2">Saúde</Text>
+                <View className="flex-row flex-wrap mb-3">
+                  <TagSim label="Prob. cardíacos" ativo={!!a?.problemasCardiacos} />
+                  <TagSim label="Medicamentos" ativo={!!a?.usaMedicamentos} />
+                  <TagSim label="Fumante" ativo={!!a?.fumante} />
+                </View>
+                <LinhaInfo label="Doenças crônicas" valor={a?.doencasCronicas || null} />
+                <LinhaInfo label="Medicamentos" valor={a?.usaMedicamentos ? a.medicamentos : null} />
+                <LinhaInfo label="Consumo de álcool" valor={ALCOOL_LABELS[a?.consumoAlcool || ''] || null} />
+
+                {/* Lesões */}
+                <Text className="text-textMuted text-xs font-semibold uppercase tracking-widest mb-2 mt-3">Lesões e Limitações</Text>
+                <LinhaInfo label="Lesão atual" valor={a?.temLesaoAtual ? (a.lesaoAtual || 'Sim — sem descrição') : 'Nenhuma'} />
+                <LinhaInfo label="Lesão anterior" valor={a?.temLesaoPassada ? (a.lesaoPassada || 'Sim — sem descrição') : 'Nenhuma'} />
+                <LinhaInfo label="Limitação física" valor={a?.temLimitacaoFisica ? (a.limitacaoFisica || 'Sim — sem descrição') : 'Nenhuma'} />
+                <LinhaInfo label="Deficiência" valor={a?.temDeficiencia ? (a.deficiencia || 'Sim — sem descrição') : 'Nenhuma'} />
+
+                {a?.observacoes ? (
+                  <>
+                    <Text className="text-textMuted text-xs font-semibold uppercase tracking-widest mb-2 mt-3">Observações</Text>
+                    <Text className="text-textPrimary text-sm leading-5">{a.observacoes}</Text>
+                  </>
+                ) : null}
+              </View>
+            )}
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -372,7 +480,7 @@ export default function AlunosScreen() {
   const [busca, setBusca] = useState('');
   const [modalAberto, setModalAberto] = useState(false);
   const [alunoEditando, setAlunoEditando] = useState<Aluno | null>(null);
-  const [anamneseAluno, setAnamneseAluno] = useState<{ id: string; nome: string } | null>(null);
+  const [alunoDetalhe, setAlunoDetalhe] = useState<Aluno | null>(null);
   const queryClient = useQueryClient();
 
   const { data: alunos = [], isLoading } = useQuery<Aluno[]>({
@@ -446,8 +554,12 @@ export default function AlunosScreen() {
             </View>
           }
           renderItem={({ item: aluno }) => (
-            <View className="bg-surface border border-border rounded-2xl p-4 mb-3">
-              <View className="flex-row items-center mb-3">
+            <TouchableOpacity
+              onPress={() => setAlunoDetalhe(aluno)}
+              className="bg-surface border border-border rounded-2xl p-4 mb-3"
+              activeOpacity={0.75}
+            >
+              <View className="flex-row items-center">
                 <View className="w-14 h-14 rounded-2xl bg-primary/20 items-center justify-center mr-4">
                   <Text className="text-primary font-bold text-xl">
                     {(aluno.nome || aluno.email)[0].toUpperCase()}
@@ -466,61 +578,21 @@ export default function AlunosScreen() {
                     </View>
                   ) : null}
                 </View>
+                <Ionicons name="chevron-forward" size={18} color="#2e2e40" />
               </View>
-
-              {/* Ações */}
-              <View className="flex-row gap-2">
-                <TouchableOpacity
-                  onPress={() => router.push({
-                    pathname: '/(personal)/treinos',
-                    params: { alunoId: aluno._id, alunoNome: aluno.nome },
-                  })}
-                  className="flex-1 bg-primary/10 py-2 rounded-xl items-center"
-                >
-                  <Text className="text-primary text-xs font-semibold">Ver treinos</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => setAnamneseAluno({ id: aluno._id, nome: aluno.nome || aluno.email })}
-                  className="w-9 h-9 bg-surface border border-border rounded-xl items-center justify-center"
-                >
-                  <Ionicons name="clipboard-outline" size={16} color="#9090a8" />
-                </TouchableOpacity>
-
-                {aluno.telefone ? (
-                  <TouchableOpacity
-                    onPress={() => enviarWhatsApp(aluno.nome, aluno.email, '••••••', aluno.telefone)}
-                    className="w-9 h-9 bg-green-500/10 rounded-xl items-center justify-center"
-                  >
-                    <Ionicons name="logo-whatsapp" size={18} color="#22c55e" />
-                  </TouchableOpacity>
-                ) : null}
-
-                <TouchableOpacity
-                  onPress={() => setAlunoEditando(aluno)}
-                  className="w-9 h-9 bg-surface border border-border rounded-xl items-center justify-center"
-                >
-                  <Ionicons name="pencil-outline" size={16} color="#9090a8" />
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  onPress={() => confirmarRemocao(aluno)}
-                  className="w-9 h-9 bg-red-500/10 rounded-xl items-center justify-center"
-                >
-                  <Ionicons name="trash-outline" size={16} color="#f87171" />
-                </TouchableOpacity>
-              </View>
-            </View>
+            </TouchableOpacity>
           )}
         />
       )}
 
       <ModalNovoAluno visivel={modalAberto} onFechar={() => setModalAberto(false)} />
       <ModalEditarAluno aluno={alunoEditando} onFechar={() => setAlunoEditando(null)} />
-      <ModalAnamnese
-        alunoId={anamneseAluno?.id ?? null}
-        nomeAluno={anamneseAluno?.nome ?? ''}
-        onFechar={() => setAnamneseAluno(null)}
+      <ModalDetalheAluno
+        aluno={alunoDetalhe}
+        onFechar={() => setAlunoDetalhe(null)}
+        onEditar={(a) => setAlunoEditando(a)}
+        onRemover={(a) => confirmarRemocao(a)}
+        onVerTreinos={(a) => router.push({ pathname: '/(personal)/treinos', params: { alunoId: a._id, alunoNome: a.nome } })}
       />
     </SafeAreaView>
   );
