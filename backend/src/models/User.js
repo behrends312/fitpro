@@ -1,5 +1,37 @@
 const { Schema, model } = require('mongoose');
 
+const AnamneseSchema = new Schema({
+  // Histórico de treino
+  tempoTreinando: { type: String, default: '' }, // 'nunca','menos6','6a12','1a3anos','mais3anos'
+  frequenciaSemanal: { type: Number, default: null },
+
+  // Lesões
+  temLesaoAtual: { type: Boolean, default: false },
+  lesaoAtual: { type: String, default: '' },
+  temLesaoPassada: { type: Boolean, default: false },
+  lesaoPassada: { type: String, default: '' },
+
+  // Saúde
+  doencasCronicas: { type: String, default: '' },
+  problemasCardiacos: { type: Boolean, default: false },
+  usaMedicamentos: { type: Boolean, default: false },
+  medicamentos: { type: String, default: '' },
+
+  // Limitações físicas
+  temLimitacaoFisica: { type: Boolean, default: false },
+  limitacaoFisica: { type: String, default: '' },
+  temDeficiencia: { type: Boolean, default: false },
+  deficiencia: { type: String, default: '' },
+
+  // Estilo de vida
+  nivelAtividade: { type: String, default: '' }, // 'sedentario','leve','moderado','ativo','muito_ativo'
+  profissaoSedentaria: { type: Boolean, default: null },
+  fumante: { type: Boolean, default: false },
+  consumoAlcool: { type: String, default: '' }, // 'nunca','social','frequente'
+
+  observacoes: { type: String, default: '' },
+}, { _id: false });
+
 const PlanoSchema = new Schema({
   tipo: { type: String, enum: ['trial', 'basic', 'intermediate', 'advanced'], default: 'trial' },
   stripeCustomerId: { type: String, default: null },
@@ -50,6 +82,10 @@ const UserSchema = new Schema(
     dataNascimento: { type: Date, default: null },
 
     ativo: { type: Boolean, default: true },
+
+    // Anamnese
+    anamneseConcluida: { type: Boolean, default: false },
+    anamnese: { type: AnamneseSchema, default: () => ({}) },
 
     // Gamificação (apenas para alunos)
     xp: { type: Number, default: 0 },

@@ -20,6 +20,10 @@ export default function AlunoLayout() {
       }}
     >
       <Tabs.Screen
+        name="anamnese"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
         name="treino"
         options={{
           title: 'Treino',

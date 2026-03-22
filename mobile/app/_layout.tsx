@@ -4,16 +4,11 @@ import { Stack, router } from 'expo-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { TextInput } from 'react-native';
 import { useAuthStore } from '../src/store/authStore';
-
-// Remove o highlight/escurecimento nativo do iOS quando o dedo passa sobre um input durante scroll
-if (TextInput.defaultProps == null) (TextInput as any).defaultProps = {};
-(TextInput as any).defaultProps.style = [{ backgroundColor: 'transparent' }];
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { retry: 2, staleTime: 1000 * 60 * 5 },
+    queries: { retry: 2, staleTime: 0 },
   },
 });
 
@@ -32,11 +27,12 @@ export default function RootLayout() {
       return;
     }
 
-    // Redireciona para a área correta conforme o role
     if (user?.role === 'admin') {
       router.replace('/(admin)/dashboard');
     } else if (user?.role === 'personal') {
       router.replace('/(personal)/dashboard');
+    } else if (!user?.anamneseConcluida) {
+      router.replace('/(aluno)/anamnese' as any);
     } else {
       router.replace('/(aluno)/treino');
     }

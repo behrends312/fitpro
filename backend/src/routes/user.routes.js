@@ -4,6 +4,7 @@ const { authorize } = require('../middlewares/role');
 const { uploadImage } = require('../middlewares/upload');
 const {
   getMe, updateMe, listarMeusAlunos, getAluno, criarAluno, editarAluno, removerAluno,
+  salvarAnamnese, getAnamneseAluno,
 } = require('../controllers/user.controller');
 
 const router = Router();
@@ -13,6 +14,10 @@ router.use(authenticate);
 // Perfil próprio
 router.get('/me', getMe);
 router.patch('/me', uploadImage.single('foto'), updateMe);
+
+// Anamnese (aluno salva, personal consulta)
+router.patch('/me/anamnese', salvarAnamnese);
+router.get('/alunos/:id/anamnese', authorize('personal', 'admin'), getAnamneseAluno);
 
 // Gestão de alunos (personal only)
 router.get('/alunos', authorize('personal', 'admin'), listarMeusAlunos);

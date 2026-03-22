@@ -10,6 +10,7 @@ export interface User {
   role: UserRole;
   nome: string;
   foto: string | null;
+  anamneseConcluida?: boolean;
 }
 
 interface AuthState {

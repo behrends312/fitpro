@@ -23,7 +23,7 @@ async function register(req, res, next) {
     const token = signToken(user);
     return res.status(201).json({
       token,
-      user: { id: user._id, email: user.email, role: user.role, nome: user.nome, foto: user.foto }
+      user: { id: user._id, email: user.email, role: user.role, nome: user.nome, foto: user.foto, anamneseConcluida: user.anamneseConcluida }
     });
   } catch (err) {
     next(err);
@@ -48,7 +48,7 @@ async function login(req, res, next) {
     const token = signToken(user);
     return res.json({
       token,
-      user: { id: user._id, email: user.email, role: user.role, nome: user.nome, foto: user.foto }
+      user: { id: user._id, email: user.email, role: user.role, nome: user.nome, foto: user.foto, anamneseConcluida: user.anamneseConcluida }
     });
   } catch (err) {
     next(err);

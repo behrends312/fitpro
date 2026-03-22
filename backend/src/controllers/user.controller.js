@@ -1,4 +1,8 @@
 const User = require('../models/User');
+const Treino = require('../models/Treino');
+const PlanoTreino = require('../models/PlanoTreino');
+const Progresso = require('../models/Progresso');
+const TreinoSessao = require('../models/TreinoSessao');
 const bcrypt = require('bcryptjs');
 
 // GET /users/me
@@ -135,17 +139,59 @@ async function editarAluno(req, res, next) {
   }
 }
 
-// DELETE /users/alunos/:id — personal desvincula aluno
+// DELETE /users/alunos/:id — personal deleta aluno e todos os dados vinculados
 async function removerAluno(req, res, next) {
   try {
-    const aluno = await User.findOne({ _id: req.params.id, personalId: req.user.id });
+    const aluno = await User.findOne({ _id: req.params.id, personalId: req.user.id, role: 'aluno' });
     if (!aluno) return res.status(404).json({ message: 'Aluno não encontrado.' });
-    aluno.personalId = null;
-    await aluno.save();
-    res.json({ message: 'Aluno desvinculado com sucesso.' });
+
+    const alunoId = aluno._id;
+
+    // Deleta todos os dados do aluno em paralelo
+    await Promise.all([
+      Treino.deleteMany({ aluno: alunoId }),
+      TreinoSessao.deleteMany({ aluno: alunoId }),
+      Progresso.deleteMany({ aluno: alunoId }),
+      User.deleteOne({ _id: alunoId }),
+    ]);
+
+    res.json({ message: 'Aluno e todos os seus dados foram removidos.' });
   } catch (err) {
     next(err);
   }
 }
 
-module.exports = { getMe, updateMe, listarMeusAlunos, getAluno, criarAluno, editarAluno, removerAluno };
+// PATCH /users/me/anamnese — aluno salva sua anamnese
+async function salvarAnamnese(req, res, next) {
+  try {
+    const campos = [
+      'tempoTreinando', 'frequenciaSemanal',
+      'temLesaoAtual', 'lesaoAtual', 'temLesaoPassada', 'lesaoPassada',
+      'doencasCronicas', 'problemasCardiacos', 'usaMedicamentos', 'medicamentos',
+      'temLimitacaoFisica', 'limitacaoFisica', 'temDeficiencia', 'deficiencia',
+      'nivelAtividade', 'profissaoSedentaria', 'fumante', 'consumoAlcool', 'observacoes',
+    ];
+    const update = {};
+    campos.forEach((c) => { if (req.body[c] !== undefined) update[`anamnese.${c}`] = req.body[c]; });
+    update.anamneseConcluida = true;
+
+    const user = await User.findByIdAndUpdate(req.user.id, { $set: update }, { new: true }).select('-password');
+    res.json(user);
+  } catch (err) {
+    next(err);
+  }
+}
+
+// GET /users/alunos/:id/anamnese — personal consulta anamnese do aluno
+async function getAnamneseAluno(req, res, next) {
+  try {
+    const aluno = await User.findOne({ _id: req.params.id, personalId: req.user.id, role: 'aluno' })
+      .select('nome email anamnese anamneseConcluida peso altura dataNascimento objetivo');
+    if (!aluno) return res.status(404).json({ message: 'Aluno não encontrado.' });
+    res.json(aluno);
+  } catch (err) {
+    next(err);
+  }
+}
+
+module.exports = { getMe, updateMe, listarMeusAlunos, getAluno, criarAluno, editarAluno, removerAluno, salvarAnamnese, getAnamneseAluno };
