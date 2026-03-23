@@ -8,7 +8,7 @@ async function listar(req, res, next) {
 
     let baseQuery;
     if (scope === 'minha') {
-      baseQuery = { ativo: true, criadoPor: req.user.id };
+      baseQuery = { ativo: true, criadoPor: req.user.id, importado: { $ne: true } };
     } else if (scope === 'predefinidos') {
       baseQuery = { ativo: true, publica: true };
     } else {
@@ -150,6 +150,7 @@ async function importar(req, res, next) {
         dificuldade: dificuldade || 'intermediario',
         criadoPor: req.user.id,
         publica: false,
+        importado: true,
         ...(gifUrl ? { thumbnailUrl: gifUrl } : {}),
       });
     } else if (gifUrl && !exercicio.thumbnailUrl) {

@@ -1,10 +1,17 @@
 import '../global.css';
 import { useEffect } from 'react';
 import { Stack, router } from 'expo-router';
+import { TouchableOpacity } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useAuthStore } from '../src/store/authStore';
+
+// Remove o efeito de escurecimento ao tocar em qualquer botão do app
+(TouchableOpacity as any).defaultProps = {
+  ...((TouchableOpacity as any).defaultProps ?? {}),
+  activeOpacity: 1,
+};
 
 const queryClient = new QueryClient({
   defaultOptions: {

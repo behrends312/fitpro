@@ -341,6 +341,7 @@ interface GamificacaoResultado {
 export default function TreinoScreen() {
   const queryClient = useQueryClient();
   const [sessaoAtiva, setSessaoAtiva] = useState<Sessao | null>(null);
+  const [sessaoPendente, setSessaoPendente] = useState<Sessao | null>(null);
   const [exercicios, setExercicios] = useState<ExercicioExec[]>([]);
   const [mostrarTodos, setMostrarTodos] = useState(false);
   const [timerDescanso, setTimerDescanso] = useState<{ eIdx: number; segundos: number } | null>(null);
@@ -373,21 +374,13 @@ export default function TreinoScreen() {
     return () => unsubscribe();
   }, []);
 
-  // Restaura sessão local ao abrir
+  // Verifica sessão local ao abrir — descarta se mais de 24h, senão mostra prompt
   useEffect(() => {
     Offline.getSessaoLocal().then((local) => {
-      if (local && !sessaoAtivaRef.current) {
-        setSessaoAtiva(local);
-        setExercicios(local.exerciciosExecutados);
-        const primeiroIncompleto = local.exerciciosExecutados.findIndex(
-          (ex: ExercicioExec) => ex.series.some((s) => !s.completada)
-        );
-        const inicial = new Set<number>();
-        local.exerciciosExecutados.forEach((_: any, i: number) => {
-          if (i !== primeiroIncompleto) inicial.add(i);
-        });
-        setColapsados(inicial);
-      }
+      if (!local || sessaoAtivaRef.current) return;
+      const horas = (Date.now() - new Date(local.dataInicio).getTime()) / 3600000;
+      if (horas > 24) { Offline.clearSessaoLocal(); return; }
+      setSessaoPendente(local);
     });
   }, []);
 
@@ -439,19 +432,11 @@ export default function TreinoScreen() {
     retry: 0,
   });
 
+  // Sessão ativa na API — não restaura automaticamente, só mostra prompt
   useEffect(() => {
-    if (sessaoAtivaDados) {
-      setSessaoAtiva(sessaoAtivaDados);
-      setExercicios(sessaoAtivaDados.exerciciosExecutados);
+    if (sessaoAtivaDados && !sessaoAtivaRef.current) {
+      setSessaoPendente(sessaoAtivaDados);
       Offline.clearSessaoLocal();
-      const primeiroIncompleto = sessaoAtivaDados.exerciciosExecutados.findIndex(
-        (ex: any) => ex.series.some((s: any) => !s.completada)
-      );
-      const inicial = new Set<number>();
-      sessaoAtivaDados.exerciciosExecutados.forEach((_: any, i: number) => {
-        if (i !== primeiroIncompleto) inicial.add(i);
-      });
-      setColapsados(inicial);
     }
   }, [sessaoAtivaDados]);
 
@@ -539,7 +524,11 @@ export default function TreinoScreen() {
     onSuccess: (response: any) => {
       setSessaoAtiva(null);
       setExercicios([]);
-      queryClient.invalidateQueries({ queryKey: ['treinos-aluno', 'sessao-ativa', 'sessoes-semana', 'meu-perfil', 'ultima-sessao'] });
+      queryClient.invalidateQueries({ queryKey: ['treinos-aluno'] });
+      queryClient.invalidateQueries({ queryKey: ['sessao-ativa'] });
+      queryClient.invalidateQueries({ queryKey: ['sessoes-semana'] });
+      queryClient.invalidateQueries({ queryKey: ['meu-perfil'] });
+      queryClient.invalidateQueries({ queryKey: ['ultima-sessao'] });
 
       if (response?.data?.gamificacao) {
         setGamiResultado(response.data.gamificacao);
@@ -630,6 +619,36 @@ export default function TreinoScreen() {
   const listaExibida = mostrarTodos ? treinosOrdenados : treinosOrdenados.filter((t) => t.tipo === proximoTipo);
   const temOutros = !mostrarTodos && treinos.length > listaExibida.length;
 
+  function retomar() {
+    if (!sessaoPendente) return;
+    const s = sessaoPendente;
+    setSessaoAtiva(s);
+    setExercicios(s.exerciciosExecutados);
+    const primeiroIncompleto = s.exerciciosExecutados.findIndex(
+      (ex: ExercicioExec) => ex.series.some((serie) => !serie.completada)
+    );
+    const inicial = new Set<number>();
+    s.exerciciosExecutados.forEach((_: any, i: number) => {
+      if (i !== primeiroIncompleto) inicial.add(i);
+    });
+    setColapsados(inicial);
+    setSessaoPendente(null);
+  }
+
+  async function descartar() {
+    if (!sessaoPendente) return;
+    await Offline.clearSessaoLocal();
+    if (!sessaoPendente._id.startsWith('offline_')) {
+      try {
+        await api.post(`/sessoes/${sessaoPendente._id}/concluir`, {
+          exerciciosExecutados: sessaoPendente.exerciciosExecutados,
+        });
+      } catch {}
+    }
+    setSessaoPendente(null);
+    queryClient.invalidateQueries({ queryKey: ['sessao-ativa'] });
+  }
+
   if (!sessaoAtiva) {
     return (
       <SafeAreaView className="flex-1 bg-background">
@@ -641,6 +660,44 @@ export default function TreinoScreen() {
           </View>
 
           <CalendarioSemana />
+
+          {/* Card de retomada — só aparece se havia sessão em andamento */}
+          {sessaoPendente && (
+            <View className="mx-5 mb-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4">
+              <View className="flex-row items-center gap-2 mb-2">
+                <Ionicons name="time-outline" size={16} color="#f59e0b" />
+                <Text style={{ color: '#f59e0b' }} className="font-bold text-sm">Treino em andamento</Text>
+              </View>
+              <Text className="text-textPrimary font-semibold text-base">{sessaoPendente.treino.nome}</Text>
+              <Text className="text-textMuted text-xs mt-0.5 mb-4">
+                {sessaoPendente.exerciciosExecutados.filter(
+                  (ex: ExercicioExec) => ex.series.every((s) => s.completada)
+                ).length}/{sessaoPendente.exerciciosExecutados.length} exercícios concluídos
+              </Text>
+              <View className="flex-row gap-2">
+                <TouchableOpacity
+                  onPress={() => Alert.alert(
+                    'Descartar treino?',
+                    'O progresso deste treino será perdido.',
+                    [
+                      { text: 'Cancelar', style: 'cancel' },
+                      { text: 'Descartar', style: 'destructive', onPress: descartar },
+                    ]
+                  )}
+                  className="flex-1 bg-background border border-border rounded-xl py-3 items-center"
+                >
+                  <Text className="text-textSecondary text-sm font-semibold">Descartar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={retomar}
+                  className="flex-1 rounded-xl py-3 items-center"
+                  style={{ backgroundColor: '#f59e0b' }}
+                >
+                  <Text className="text-white text-sm font-bold">Retomar treino</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
 
           <View className="px-5">
             {isLoading ? (
@@ -759,6 +816,59 @@ export default function TreinoScreen() {
             )}
           </View>
         </ScrollView>
+
+        {/* Modal de XP / Gamificação — mostrado logo após concluir */}
+        <Modal visible={!!gamiResultado} transparent animationType="slide" onRequestClose={() => setGamiResultado(null)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' }}>
+            <View className="bg-surface rounded-t-3xl p-6 pb-10">
+              <View className="items-center mb-5">
+                <Text style={{ fontSize: 56 }}>🎉</Text>
+                <Text className="text-textPrimary text-2xl font-bold mt-2">Treino concluído!</Text>
+                <Text className="text-textSecondary text-sm mt-1">Ótimo trabalho! Continue assim.</Text>
+              </View>
+              <View className="bg-primary/10 border border-primary/30 rounded-2xl p-4 mb-3 items-center">
+                <Text className="text-primary text-4xl font-bold">+{gamiResultado?.xpGanho} XP</Text>
+                <Text className="text-textSecondary text-sm mt-1">
+                  Total: {gamiResultado?.xpTotal} XP · Nível {gamiResultado?.nivel}
+                </Text>
+                {gamiResultado?.xpProximoNivel && (
+                  <Text className="text-textMuted text-xs mt-1">
+                    {gamiResultado.xpProximoNivel - (gamiResultado.xpTotal ?? 0)} XP para o próximo nível
+                  </Text>
+                )}
+              </View>
+              {(gamiResultado?.streak ?? 0) > 0 && (
+                <View className="bg-surface border border-border rounded-2xl p-3 mb-3 flex-row items-center gap-3">
+                  <Text style={{ fontSize: 28 }}>🔥</Text>
+                  <View>
+                    <Text className="text-textPrimary font-bold">{gamiResultado?.streak} dias seguidos</Text>
+                    <Text className="text-textMuted text-xs">Continue a sequência amanhã!</Text>
+                  </View>
+                </View>
+              )}
+              {(gamiResultado?.badgesNovos?.length ?? 0) > 0 && (
+                <View className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-4 mb-3">
+                  <Text className="text-yellow-400 text-xs font-bold uppercase tracking-widest mb-2">Nova conquista!</Text>
+                  {gamiResultado!.badgesNovos.map((b) => (
+                    <View key={b.id} className="flex-row items-center gap-3">
+                      <Text style={{ fontSize: 28 }}>{b.icone}</Text>
+                      <View>
+                        <Text className="text-textPrimary font-bold">{b.nome}</Text>
+                        <Text className="text-textMuted text-xs">{b.descricao}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+              <TouchableOpacity
+                onPress={() => setGamiResultado(null)}
+                className="bg-primary rounded-2xl py-4 items-center mt-2"
+              >
+                <Text className="text-white font-bold text-base">Fechar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     );
   }
@@ -925,6 +1035,13 @@ export default function TreinoScreen() {
                   )}
                 </View>
                 <View className="flex-row items-center gap-2">
+                  {(ex.exercicio.videoUrl || ex.exercicio.thumbnailUrl) && (
+                    <Ionicons
+                      name={ex.exercicio.videoUrl ? 'play-circle' : 'image'}
+                      size={16}
+                      color="#6C63FF"
+                    />
+                  )}
                   <View className={`px-2 py-0.5 rounded-md ${completo ? 'bg-success/20' : 'bg-surface border border-border'}`}>
                     <Text className={`text-xs font-semibold ${completo ? 'text-success' : 'text-textSecondary'}`}>{feitos}/{total}</Text>
                   </View>
@@ -933,23 +1050,40 @@ export default function TreinoScreen() {
               </TouchableOpacity>
 
               {!colapsado && (
-                <View className="px-4 pb-4">
-                  {ex.exercicio.videoUrl && (
+                <View className="pb-4">
+                  {/* Preview de mídia inline */}
+                  {(ex.exercicio.videoUrl || ex.exercicio.thumbnailUrl) && (
                     <TouchableOpacity
-                      onPress={() => setVideoAtivo(ex.exercicio.videoUrl!)}
-                      className="flex-row items-center gap-2 mb-3 bg-primary/10 border border-primary/30 rounded-xl px-4 py-2.5"
+                      onPress={() => ex.exercicio.videoUrl
+                        ? setVideoAtivo(ex.exercicio.videoUrl!)
+                        : setGifAtivo(ex.exercicio.thumbnailUrl!)}
+                      activeOpacity={0.85}
+                      style={{ marginHorizontal: 16, marginBottom: 14, borderRadius: 14, overflow: 'hidden', height: 180, backgroundColor: '#13131f' }}
                     >
-                      <Ionicons name="play-circle-outline" size={20} color="#6C63FF" />
-                      <Text className="text-primary text-sm font-semibold">Ver vídeo do exercício</Text>
-                    </TouchableOpacity>
-                  )}
-                  {!ex.exercicio.videoUrl && ex.exercicio.thumbnailUrl && (
-                    <TouchableOpacity
-                      onPress={() => setGifAtivo(ex.exercicio.thumbnailUrl!)}
-                      className="flex-row items-center gap-2 mb-3 bg-primary/10 border border-primary/30 rounded-xl px-4 py-2.5"
-                    >
-                      <Ionicons name="image-outline" size={20} color="#6C63FF" />
-                      <Text className="text-primary text-sm font-semibold">Ver demonstração</Text>
+                      {ex.exercicio.thumbnailUrl ? (
+                        <Image
+                          source={{ uri: ex.exercicio.thumbnailUrl }}
+                          style={{ width: '100%', height: '100%' }}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={{ flex: 1, backgroundColor: '#13131f', alignItems: 'center', justifyContent: 'center' }}>
+                          <Ionicons name="videocam-outline" size={40} color="#2e2e40" />
+                        </View>
+                      )}
+                      {ex.exercicio.videoUrl && (
+                        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.25)' }}>
+                          <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: 'rgba(108,99,255,0.92)', alignItems: 'center', justifyContent: 'center' }}>
+                            <Ionicons name="play" size={24} color="white" />
+                          </View>
+                        </View>
+                      )}
+                      {!ex.exercicio.videoUrl && ex.exercicio.thumbnailUrl && (
+                        <View style={{ position: 'absolute', bottom: 8, right: 10, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                          <Ionicons name="image-outline" size={11} color="white" />
+                          <Text style={{ color: 'white', fontSize: 11, fontWeight: '600' }}>GIF</Text>
+                        </View>
+                      )}
                     </TouchableOpacity>
                   )}
                   <View className="flex-row items-center px-4 mb-2">

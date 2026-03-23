@@ -161,10 +161,15 @@ async function historico(req, res, next) {
   }
 }
 
-// GET /sessoes/ativa — sessão em andamento
+// GET /sessoes/ativa — sessão em andamento (ignora sessões com mais de 24h)
 async function sessaoAtiva(req, res, next) {
   try {
-    const sessao = await TreinoSessao.findOne({ aluno: req.user.id, status: 'em_andamento' })
+    const limite = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const sessao = await TreinoSessao.findOne({
+      aluno: req.user.id,
+      status: 'em_andamento',
+      dataInicio: { $gte: limite },
+    })
       .populate('treino', 'nome tipo')
       .populate('exerciciosExecutados.exercicio', 'nome videoUrl thumbnailUrl');
     res.json(sessao || null);

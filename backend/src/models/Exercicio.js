@@ -31,6 +31,7 @@ const ExercicioSchema = new Schema(
     // Criado por qual personal (null = exercício da plataforma)
     criadoPor: { type: Schema.Types.ObjectId, ref: 'User', default: null },
     publica: { type: Boolean, default: false }, // visível para todos os personais?
+    importado: { type: Boolean, default: false }, // true = veio de predefinidos, false = criado pelo personal
 
     ativo: { type: Boolean, default: true },
   },

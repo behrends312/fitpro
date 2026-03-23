@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import {
   View, Text, ScrollView, TouchableOpacity, TextInput, Modal,
@@ -104,6 +104,17 @@ function ModalTreino({
     queryFn: () => api.get('/exercicios').then((r) => r.data),
     enabled: visivel && step === 'exercicios',
   });
+
+  // Agrupa exercícios da biblioteca por grupo muscular
+  const exerciciosPorGrupo = useMemo(() => {
+    const mapa = new Map<string, ExercicioDisponivel[]>();
+    exercicios.forEach((ex) => {
+      const grupo = ex.musculosPrincipais?.[0] || 'Sem grupo';
+      if (!mapa.has(grupo)) mapa.set(grupo, []);
+      mapa.get(grupo)!.push(ex);
+    });
+    return Array.from(mapa.entries()).sort(([a], [b]) => a.localeCompare(b));
+  }, [exercicios]);
 
   const criarMutation = useMutation({
     mutationFn: () => api.post('/treinos', {
@@ -315,6 +326,12 @@ function ModalTreino({
                   {exerciciosSel.length > 0 && (
                     <View className="mb-5">
                       <Text className="text-textSecondary text-xs font-semibold mb-2 uppercase tracking-widest">Selecionados ({exerciciosSel.length})</Text>
+                      <ScrollView
+                        nestedScrollEnabled
+                        showsVerticalScrollIndicator={exerciciosSel.length > 3}
+                        style={{ maxHeight: exerciciosSel.length > 3 ? 420 : undefined }}
+                        keyboardShouldPersistTaps="handled"
+                      >
                       {exerciciosSel.map((e, eIdx) => {
                         const GRUPO_COR: Record<GrupoTipo, string> = {
                           'none': 'transparent',
@@ -387,6 +404,7 @@ function ModalTreino({
                           </View>
                         );
                       })}
+                      </ScrollView>
                     </View>
                   )}
 
@@ -403,26 +421,34 @@ function ModalTreino({
 
                   {abaEx === 'biblioteca' ? (
                     <>
-                      <Text className="text-textSecondary text-xs font-semibold mb-3 uppercase tracking-widest">Biblioteca de exercícios</Text>
-                      {exercicios.map((ex) => {
-                        const selecionado = exerciciosSel.some((e) => e.exercicio._id === ex._id);
-                        return (
-                          <TouchableOpacity key={ex._id} onPress={() => toggleExercicio(ex)} className={`flex-row items-center p-3 rounded-xl border mb-2 ${selecionado ? 'border-primary bg-primary/5' : 'border-border bg-background'}`}>
-                            <View className={`w-8 h-8 rounded-lg items-center justify-center mr-3 ${selecionado ? 'bg-primary' : 'bg-surface'}`}>
-                              <Ionicons name={selecionado ? 'checkmark' : 'add'} size={16} color={selecionado ? 'white' : '#9090a8'} />
-                            </View>
-                            <View className="flex-1">
-                              <Text className={`font-semibold ${selecionado ? 'text-textPrimary' : 'text-textSecondary'}`}>{ex.nome}</Text>
-                              {ex.musculosPrincipais?.length > 0 && <Text className="text-textMuted text-xs">{ex.musculosPrincipais.join(' · ')}</Text>}
-                            </View>
-                          </TouchableOpacity>
-                        );
-                      })}
-                      {exercicios.length === 0 && (
+                      {exerciciosPorGrupo.length === 0 && (
                         <View className="items-center py-8">
                           <Text className="text-textSecondary text-sm text-center">Biblioteca vazia.{'\n'}Use a aba Predefinidos para adicionar exercícios!</Text>
                         </View>
                       )}
+                      {exerciciosPorGrupo.map(([grupo, exs]) => (
+                        <View key={grupo}>
+                          <View className="flex-row items-center gap-2 mb-2 mt-3">
+                            <Text className="text-textMuted text-xs font-bold uppercase tracking-widest">{grupo}</Text>
+                            <View className="flex-1 h-px bg-border" />
+                            <Text className="text-textMuted text-xs">{exs.length}</Text>
+                          </View>
+                          {exs.map((ex) => {
+                            const selecionado = exerciciosSel.some((e) => e.exercicio._id === ex._id);
+                            return (
+                              <TouchableOpacity key={ex._id} onPress={() => toggleExercicio(ex)} className={`flex-row items-center p-3 rounded-xl border mb-2 ${selecionado ? 'border-primary bg-primary/5' : 'border-border bg-background'}`}>
+                                <View className={`w-8 h-8 rounded-lg items-center justify-center mr-3 ${selecionado ? 'bg-primary' : 'bg-surface'}`}>
+                                  <Ionicons name={selecionado ? 'checkmark' : 'add'} size={16} color={selecionado ? 'white' : '#9090a8'} />
+                                </View>
+                                <View className="flex-1">
+                                  <Text className={`font-semibold ${selecionado ? 'text-textPrimary' : 'text-textSecondary'}`}>{ex.nome}</Text>
+                                  {ex.musculosPrincipais?.length > 0 && <Text className="text-textMuted text-xs">{ex.musculosPrincipais.join(' · ')}</Text>}
+                                </View>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      ))}
                     </>
                   ) : (
                     <>

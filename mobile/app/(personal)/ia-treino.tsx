@@ -109,6 +109,153 @@ function ModalAlunoSelector({ visible, alunos, onSelect, onClose }: ModalAlunoPr
   );
 }
 
+// ── CAMPO EDIT (helper for ModalEditarTreino) ─────────────────────────────────
+function CampoEdit({ label, value, onChange, keyboardType = 'default', multiline = false }: any) {
+  return (
+    <View style={{ marginBottom: 10 }}>
+      {label ? <Text style={{ color: '#9090a8', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 }}>{label}</Text> : null}
+      <View style={{ backgroundColor: '#0f0f1a', borderWidth: 1, borderColor: '#2e2e40', borderRadius: 10, paddingHorizontal: 12 }}>
+        <TextInput
+          value={value}
+          onChangeText={onChange}
+          keyboardType={keyboardType}
+          multiline={multiline}
+          numberOfLines={multiline ? 2 : 1}
+          textAlignVertical={multiline ? 'top' : 'center'}
+          style={{ color: '#fff', fontSize: 13, paddingVertical: 10, minHeight: multiline ? 52 : undefined }}
+          placeholderTextColor="#5a5a70"
+        />
+      </View>
+    </View>
+  );
+}
+
+// ── MODAL EDITAR TREINO ───────────────────────────────────────────────────────
+function ModalEditarTreino({
+  treino,
+  treinoIdx,
+  onSalvar,
+  onFechar,
+}: {
+  treino: TreinoGerado | null;
+  treinoIdx: number | null;
+  onSalvar: (t: TreinoGerado) => void;
+  onFechar: () => void;
+}) {
+  const [nome, setNome] = useState('');
+  const [tipo, setTipo] = useState('');
+  const [diasText, setDiasText] = useState('');
+  const [exs, setExs] = useState<ExercicioGerado[]>([]);
+
+  useEffect(() => {
+    if (treino) {
+      setNome(treino.nome);
+      setTipo(treino.tipo);
+      setDiasText(treino.diasSemana.join(', '));
+      setExs(treino.exercicios.map((e) => ({ ...e })));
+    }
+  }, [treinoIdx]);
+
+  function updEx(i: number, campo: keyof ExercicioGerado, valor: any) {
+    setExs((prev) => prev.map((e, idx) => (idx === i ? { ...e, [campo]: valor } : e)));
+  }
+
+  function remEx(i: number) {
+    setExs((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  function salvar() {
+    onSalvar({
+      nome,
+      tipo,
+      diasSemana: diasText.split(',').map((s) => s.trim()).filter(Boolean),
+      exercicios: exs,
+    });
+    onFechar();
+  }
+
+  if (!treino) return null;
+
+  return (
+    <Modal visible={!!treino} transparent animationType="slide" onRequestClose={onFechar}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'flex-end' }}>
+        <View style={{ backgroundColor: '#1e1e2e', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '92%', flex: 1 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#2e2e40' }}>
+            <View>
+              <Text style={{ color: '#fff', fontSize: 18, fontWeight: '700' }}>Editar Treino {tipo}</Text>
+              <Text style={{ color: '#9090a8', fontSize: 12, marginTop: 2 }}>{exs.length} exercícios</Text>
+            </View>
+            <TouchableOpacity onPress={onFechar}>
+              <Ionicons name="close" size={24} color="#9090a8" />
+            </TouchableOpacity>
+          </View>
+
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+            <ScrollView
+              contentContainerStyle={{ padding: 20, paddingBottom: 16 }}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              <CampoEdit label="Nome do treino" value={nome} onChange={setNome} />
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={{ width: 80 }}>
+                  <CampoEdit label="Tipo" value={tipo} onChange={setTipo} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <CampoEdit label="Dias (separados por vírgula)" value={diasText} onChange={setDiasText} />
+                </View>
+              </View>
+
+              <Text style={{ color: '#9090a8', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 8, marginBottom: 12 }}>
+                Exercícios
+              </Text>
+
+              {exs.map((ex, i) => (
+                <View key={i} style={{ backgroundColor: '#13131f', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#2e2e40' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                    <View style={{ width: 24, height: 24, borderRadius: 6, backgroundColor: 'rgba(108,99,255,0.2)', alignItems: 'center', justifyContent: 'center', marginRight: 8 }}>
+                      <Text style={{ color: '#6C63FF', fontSize: 11, fontWeight: '700' }}>{i + 1}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <CampoEdit label="" value={ex.nome} onChange={(v: string) => updEx(i, 'nome', v)} />
+                    </View>
+                    <TouchableOpacity onPress={() => remEx(i)} style={{ marginLeft: 8, padding: 6 }}>
+                      <Ionicons name="trash-outline" size={17} color="#f87171" />
+                    </TouchableOpacity>
+                  </View>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <View style={{ flex: 1 }}>
+                      <CampoEdit label="Séries" value={String(ex.series)} onChange={(v: string) => updEx(i, 'series', parseInt(v) || 0)} keyboardType="numeric" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <CampoEdit label="Reps" value={String(ex.reps)} onChange={(v: string) => updEx(i, 'reps', v)} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <CampoEdit label="Carga kg" value={String(ex.carga)} onChange={(v: string) => updEx(i, 'carga', parseFloat(v) || 0)} keyboardType="numeric" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <CampoEdit label="Desc s" value={String(ex.descanso)} onChange={(v: string) => updEx(i, 'descanso', parseInt(v) || 0)} keyboardType="numeric" />
+                    </View>
+                  </View>
+                  <CampoEdit label="Observações" value={ex.observacoes} onChange={(v: string) => updEx(i, 'observacoes', v)} multiline />
+                </View>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity
+              onPress={salvar}
+              style={{ backgroundColor: '#6C63FF', margin: 16, borderRadius: 14, paddingVertical: 14, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+            >
+              <Ionicons name="checkmark-circle-outline" size={20} color="white" />
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Aplicar alterações</Text>
+            </TouchableOpacity>
+          </KeyboardAvoidingView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function IATreinoScreen() {
   const [tela, setTela] = useState<'lista' | 'chat'>('lista');
   const [conversas, setConversas] = useState<Conversa[]>([]);
@@ -119,23 +266,28 @@ export default function IATreinoScreen() {
   const alunoIdRef = useRef('');
   const [modalAluno, setModalAluno] = useState(false);
   const [planoSalvo, setPlanoSalvo] = useState(false);
+  const [planoEditado, setPlanoEditado] = useState<PlanoGerado | null>(null);
+  const [editIdx, setEditIdx] = useState<number | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
-      if (raw) setConversas(JSON.parse(raw));
-    });
+      if (!raw) return;
+      try { setConversas(JSON.parse(raw)); } catch {}
+    }).catch(() => {});
   }, []);
 
   async function salvarConversas(lista: Conversa[]) {
     setConversas(lista);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(lista));
+    try { await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(lista)); } catch {}
   }
 
   function abrirConversa(conversa: Conversa) {
     setConversaAtual(conversa);
     setPlanoSalvo(false);
+    setPlanoEditado(null);
+    setEditIdx(null);
     setTela('chat');
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 100);
   }
@@ -144,6 +296,8 @@ export default function IATreinoScreen() {
     const nova: Conversa = { id: gerarId(), titulo: 'Nova conversa', mensagens: [], ultimaAtualizacao: new Date().toISOString() };
     setConversaAtual(nova);
     setPlanoSalvo(false);
+    setPlanoEditado(null);
+    setEditIdx(null);
     setTela('chat');
   }
 
@@ -155,6 +309,8 @@ export default function IATreinoScreen() {
     alunoIdRef.current = '';
     setAlunoNome('');
     setPlanoSalvo(false);
+    setPlanoEditado(null);
+    setEditIdx(null);
   }
 
   async function excluirConversa(id: string) {
@@ -187,28 +343,16 @@ export default function IATreinoScreen() {
       salvarConversas(novaLista); // fire-and-forget — AsyncStorage failure não dispara onError
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
 
-      // Auto-save isolado: void garante que erros não propagam para o TanStack Query
       const plano = extractPlan(resposta);
-      const currentAlunoId = alunoIdRef.current;
-      if (plano && currentAlunoId) {
-        void api.post('/ia/salvar-plano', { planoJson: plano, alunoId: currentAlunoId })
-          .then((r) => {
-            setPlanoSalvo(true);
-            queryClient.invalidateQueries({ queryKey: ['meus-treinos'] });
-            Alert.alert('Treino salvo! 🎉', r.data.message);
-          })
-          .catch((err: any) => {
-            Alert.alert('Erro ao salvar treino', err?.response?.data?.message || err?.message || 'Falha ao salvar. Use o botão abaixo.');
-          });
-      }
+      if (plano) setPlanoEditado(plano);
     },
     onError: (err: any) =>
       Alert.alert('Erro', err?.response?.data?.message || 'Falha ao comunicar com a IA.'),
   });
 
   const salvarMutation = useMutation({
-    mutationFn: (plano: PlanoGerado) =>
-      api.post('/ia/salvar-plano', { planoJson: plano, alunoId }).then((r) => r.data),
+    mutationFn: () =>
+      api.post('/ia/salvar-plano', { planoJson: planoEditado, alunoId }).then((r) => r.data),
     onSuccess: (data) => { setPlanoSalvo(true); queryClient.invalidateQueries({ queryKey: ['meus-treinos'] }); Alert.alert('Salvo!', data.message); },
     onError: (err: any) => Alert.alert('Erro', err?.response?.data?.message || 'Falha ao salvar.'),
   });
@@ -301,6 +445,9 @@ export default function IATreinoScreen() {
   // ── TELA: CHAT ───────────────────────────────────────────────────────────
   const mensagens = conversaAtual?.mensagens ?? [];
 
+  // Find the last message that contains a plan
+  const ultimoPlanoMsgId = mensagens.reduce((acc: string, m) => extractPlan(m.content) ? m.id : acc, '');
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: '#13131f' }}>
       <ModalAlunoSelector
@@ -349,7 +496,11 @@ export default function IATreinoScreen() {
 
           {mensagens.map((msg) => {
             const plano = msg.role === 'model' ? extractPlan(msg.content) : null;
-            const texto = msg.role === 'model' ? stripJson(msg.content) : msg.content;
+            const isUltimoPlano = msg.id === ultimoPlanoMsgId;
+            const activePlano = isUltimoPlano && planoEditado ? planoEditado : plano;
+            const texto = (msg.role === 'model' && activePlano)
+              ? 'Treino gerado com sucesso! Confira os detalhes abaixo, realize as modificações necessárias e salve quando estiver pronto.'
+              : (msg.role === 'model' ? stripJson(msg.content) : msg.content);
             return (
               <View key={msg.id} style={{ marginBottom: 16, alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
                 {texto.length > 0 && (
@@ -366,21 +517,26 @@ export default function IATreinoScreen() {
                   </View>
                 )}
 
-                {plano && (
+                {activePlano && (
                   <View style={{ width: '100%', marginTop: 10, backgroundColor: '#1e1e2e', borderRadius: 18, borderWidth: 1, borderColor: planoSalvo ? 'rgba(52,211,153,0.4)' : 'rgba(108,99,255,0.3)', overflow: 'hidden' }}>
                     <View style={{ backgroundColor: planoSalvo ? 'rgba(52,211,153,0.1)' : 'rgba(108,99,255,0.1)', paddingHorizontal: 16, paddingVertical: 12, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                       <Ionicons name={planoSalvo ? 'checkmark-circle' : 'clipboard-outline'} size={18} color={planoSalvo ? '#34d399' : '#6C63FF'} />
                       <View style={{ flex: 1 }}>
-                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{plano.plano.nome}</Text>
+                        <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>{activePlano.plano.nome}</Text>
                         <Text style={{ color: '#9090a8', fontSize: 12, marginTop: 2 }}>
-                          {planoSalvo ? `Salvo para ${alunoNome} ✓` : `${plano.treinos.length} treinos gerados`}
+                          {planoSalvo ? `Salvo para ${alunoNome} ✓` : `${activePlano.treinos.length} treinos gerados`}
                         </Text>
                       </View>
                     </View>
-                    {plano.treinos.map((t, i) => {
+                    {activePlano.treinos.map((t, i) => {
                       const cor = TIPO_COR[t.tipo] || '#6C63FF';
                       return (
-                        <View key={i} style={{ paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#2e2e40', flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        <TouchableOpacity
+                          key={i}
+                          onPress={() => { if (!planoSalvo && isUltimoPlano) setEditIdx(i); }}
+                          style={{ paddingHorizontal: 16, paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#2e2e40', flexDirection: 'row', alignItems: 'center', gap: 12 }}
+                          activeOpacity={!planoSalvo && isUltimoPlano ? 0.6 : 1}
+                        >
                           <View style={{ width: 32, height: 32, borderRadius: 8, backgroundColor: `${cor}22`, alignItems: 'center', justifyContent: 'center' }}>
                             <Text style={{ color: cor, fontWeight: '700', fontSize: 14 }}>{t.tipo}</Text>
                           </View>
@@ -388,7 +544,10 @@ export default function IATreinoScreen() {
                             <Text style={{ color: '#e0e0f0', fontWeight: '600', fontSize: 13 }}>{t.nome}</Text>
                             <Text style={{ color: '#9090a8', fontSize: 12 }}>{t.exercicios.length} exercícios · {t.diasSemana.join(', ')}</Text>
                           </View>
-                        </View>
+                          {!planoSalvo && isUltimoPlano && (
+                            <Ionicons name="create-outline" size={16} color="#5a5a70" />
+                          )}
+                        </TouchableOpacity>
                       );
                     })}
                     {!planoSalvo && (
@@ -401,7 +560,7 @@ export default function IATreinoScreen() {
                           </TouchableOpacity>
                         )}
                         {alunoId && (
-                          <TouchableOpacity onPress={() => salvarMutation.mutate(plano)} disabled={salvarMutation.isPending}
+                          <TouchableOpacity onPress={() => salvarMutation.mutate()} disabled={salvarMutation.isPending}
                             style={{ backgroundColor: '#6C63FF', borderRadius: 12, paddingVertical: 12, alignItems: 'center' }}>
                             {salvarMutation.isPending ? <ActivityIndicator color="white" /> : (
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -428,6 +587,18 @@ export default function IATreinoScreen() {
             </View>
           )}
         </ScrollView>
+
+        <ModalEditarTreino
+          treino={editIdx !== null && planoEditado ? planoEditado.treinos[editIdx] : null}
+          treinoIdx={editIdx}
+          onSalvar={(t) => {
+            if (editIdx !== null && planoEditado) {
+              const novos = planoEditado.treinos.map((tr, i) => i === editIdx ? t : tr);
+              setPlanoEditado({ ...planoEditado, treinos: novos });
+            }
+          }}
+          onFechar={() => setEditIdx(null)}
+        />
 
         <View style={{ paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#2e2e40', flexDirection: 'row', alignItems: 'flex-end', gap: 10 }}>
           <View style={{ flex: 1, backgroundColor: '#1e1e2e', borderRadius: 20, borderWidth: 1, borderColor: '#2e2e40', paddingHorizontal: 16, paddingVertical: 10, minHeight: 44, maxHeight: 120 }}>

@@ -45,13 +45,14 @@ export default function AlunoIAScreen() {
   // Carregar conversas salvas
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((raw) => {
-      if (raw) setConversas(JSON.parse(raw));
-    });
+      if (!raw) return;
+      try { setConversas(JSON.parse(raw)); } catch {}
+    }).catch(() => {});
   }, []);
 
   async function salvarConversas(lista: Conversa[]) {
     setConversas(lista);
-    await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(lista));
+    try { await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(lista)); } catch {}
   }
 
   function abrirConversa(conversa: Conversa) {
